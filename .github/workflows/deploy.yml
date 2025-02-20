@@ -15,6 +15,7 @@ jobs:
 
     - name: Set up SSH
       run: |
+        mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
         chmod 600 ~/.ssh/known_hosts
 
