@@ -15,7 +15,6 @@ jobs:
 
     - name: Set up SSH
       run: |
-        echo "${{ secrets.SSH_MTL001_PRIVATE_KEY }}" > "${{ secrets.SSH_PRIVATE_KEY_PATH }}"
         chmod 600 "${{ secrets.SSH_PRIVATE_KEY_PATH }}"
         ssh-keyscan -H ${{ secrets.HOST }} >> "${{ secrets.SSH_KNOWN_HOSTS_PATH }}"
 
