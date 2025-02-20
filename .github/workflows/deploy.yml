@@ -21,6 +21,6 @@ jobs:
 
     - name: Deploy Code
       run: |
-        ssh ${{ secrets.SECRET_NAME }}@${{ secrets.HOST }} "
+        ssh -i ~/.ssh/id_rsa ${{ secrets.SECRET_NAME }}@${{ secrets.HOST }} "
         cd ${{ secrets.DEPLOY_PATH }} && git pull origin main && npm install && sudo systemctl restart ${{ secrets.SERVICE_NAME}}
         "
