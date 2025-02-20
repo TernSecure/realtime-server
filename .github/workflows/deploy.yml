@@ -16,11 +16,12 @@ jobs:
     - name: Set up SSH
       run: |
         mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
         chmod 600 ~/.ssh/known_hosts
 
     - name: Deploy Code
       run: |
-        ssh -i ~/.ssh/id_rsa ${{ secrets.SECRET_NAME }}@${{ secrets.HOST }} "
+        ssh ${{ secrets.SECRET_NAME }}@${{ secrets.HOST }} "
         cd ${{ secrets.DEPLOY_PATH }} && git pull origin main && npm install && sudo systemctl restart ${{ secrets.SERVICE_NAME}}
         "
