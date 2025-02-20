@@ -15,8 +15,8 @@ jobs:
 
     - name: Set up SSH
       run: |
-        chmod 600 "${{ secrets.SSH_PRIVATE_KEY_PATH }}"
         ssh-keyscan -H ${{ secrets.HOST }} >> "${{ secrets.SSH_KNOWN_HOSTS_PATH }}"
+        chmod 600 "${{ secrets.SSH_PRIVATE_KEY_PATH }}"
 
     - name: Deploy Code
       run: |
