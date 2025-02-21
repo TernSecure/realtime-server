@@ -1,0 +1,65 @@
+name: Deploy to server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_DEPLOY_PRIVATE_KEY }}
+
+      - name: Add SERVER to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy code to Server
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
+            # Stop the service
+            sudo systemctl stop ${{ secrets.SERVICE_NAME }}
+
+            # Backup existing code
+            timestamp=$(date +%Y%m%d_%H%M%S)
+            if [ -d "${{ secrets.DEPLOY_PATH }}"]; then
+              sudo mv ${{ secrets.DEPLOY_PATH }} "${{ secrets.DEPLOY_PATH }}_backup_${timestamp}"
+            fi
+
+            # Create and set permissions for new directory
+            sudo mkdir -p ${{ secrets.DEPLOY_PATH }}
+            sudo chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
+          '
+
+          # Copy new code to VM
+          scp -r ./* ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:${{ secrets.DEPLOY_PATH }}/
+
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} '
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Install dependencies
+            npm install --production
+
+            # Set correct permissions
+            sudo chown -R ${{ secrets.VM_USER }}:${{ secrets.VM_USER }} ${{ secrets.DEPLOY_PATH }}
+
+            # Restart the service
+            sudo systemctl daemon-reload
+            sudo systemctl enable ${{ secrets.SERVICE_NAME }}
+            sudo systemctl restart ${{ secrets.SERVICE_NAME }}
+
+            # Check service status
+            sudo systemctl status ${{ secrets.SERVICE_NAME }}
+          '
