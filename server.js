@@ -28,13 +28,6 @@ const io = new Server(httpServer, {
 });
 
 
-// Debug middleware to log raw request
-app.use((req, res, next) => {
-  console.log('Request Headers:', req.headers);
-  console.log('Request Body:', req.body);
-  next();
-});
-
 instrument(io, {
   auth: false,
   mode: "development",

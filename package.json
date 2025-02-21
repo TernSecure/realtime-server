@@ -21,7 +21,7 @@
     "ternsecure",
     "websocket"
   ],
-  "author": "Pacifique Kamugisha",
+  "author": "Pacifique Kamugisha <pacifique.kamugisha@lifesprintcare.ca>",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/TernSecure/realtime-server/issues"
