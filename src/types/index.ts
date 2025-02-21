@@ -51,3 +51,50 @@ export interface Message {
   senderId: string;
   timestamp: Date;
 }
+
+export interface ChatMessage {
+  roomId: string;
+  message: string;
+  senderId: string;
+  timestamp: Date;
+  apiKey: string; 
+}
+
+
+//events server sends to client
+export interface ServerToClientEvents {
+  "presence:enter": (data: { clientId: string; status: string }) => void;
+  "presence:update": (data: { clientId: string; status: string }) => void;
+  "presence:sync": (data: { [clientId: string]: { status: string; lastSeen: Date } }) => void;
+  "presence:leave": (data: { clientId: string }) => void;
+  
+  "chat:message": (data: ChatMessage) => void;
+  "chat:error": (data: { message: string }) => void;
+  "chat:typing": (data: { clientId: string; isTyping: boolean }) => void;
+}
+
+//events client sends to server
+export interface ClientToServerEvents {
+  "chat:private": (data: { targetId: string; message: string }) => void;
+  "chat:typing": (data: { targetId: string; isTyping: boolean }) => void;
+  
+  "presence:update": (status: string) => void;
+}
+
+export interface InterServerEvents {
+  // Define events between servers (if any)
+  ping: () => void;
+}
+
+export interface SocketData {
+  clientId: string;
+  apiKey: string;
+  socketId: string;
+}
+
+export type TypedSocket = Socket<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>;

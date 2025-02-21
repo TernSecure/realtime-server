@@ -1,11 +1,25 @@
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { createServer } from 'http';
 import express = require('express'); 
 import { instrument } from '@socket.io/admin-ui';
-import { networkInterfaces } from 'os';
 import { Redis } from 'ioredis';
 import { createAdapter } from "@socket.io/redis-adapter";
-import { socketMiddleware, handlePresence, SocketState, handleConnection} from './socket/';
+import { socketMiddleware, handlePresence, SocketState, handleConnection, logNetworkAddresses} from './socket/';
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  SocketData,
+  TypedSocket,
+} from './types'
+
+interface ServerConfig {
+  adapter: ReturnType<typeof createAdapter>;
+  transports: ('websocket' | 'polling')[];
+  cors: {
+    origin: string[];
+    credentials: boolean;
+  };
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -13,10 +27,9 @@ const redis = new Redis();
 const redisSub = redis.duplicate();
 const state = new SocketState();
 
-
 app.use(express.json());
 
-const io = new Server(httpServer, {
+const serverConfig: ServerConfig = {
   adapter: createAdapter(redis, redisSub),
   transports: ['websocket', 'polling'],
   cors: {
@@ -27,7 +40,14 @@ const io = new Server(httpServer, {
     ],
     credentials: true
   },
-});
+};
+
+
+const io = new Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  SocketData
+>(httpServer, serverConfig);
 
 
 instrument(io, {
@@ -41,7 +61,7 @@ instrument(io, {
 io.use(socketMiddleware);
 
 
-io.on("connection", (socket) => {
+io.on("connection", (socket: Socket<TypedSocket>) => {
   console.log("Client connected:", socket.id);
 
   const connectionHandler = handleConnection(io, socket, state);
@@ -63,35 +83,7 @@ io.on("connection", (socket) => {
 
 const PORT = 3000;
 httpServer.listen(PORT, () => {
-  // Get network interfaces
-
-  interface NetworkResults {
-    [key: string]: string[];
-  }
-  
-  const nets = networkInterfaces();
-  const results: NetworkResults = {};
-
-  // Collect all IP addresses
-  for (const name of Object.keys(nets)) {
-    const interfaces = nets[name];
-    if (interfaces)
-    for (const net of interfaces) {
-      // Skip internal (i.e. 127.0.0.1) and non-IPv4 addresses
-      if (net.family === 'IPv4' && !net.internal) {
-        if (!results[name]) {
-          results[name] = [];
-        }
-        results[name].push(net.address);
-      }
-    }
-  }
-
-  console.log('Server IP addresses:');
-  Object.keys(results).forEach(iface => {
-    console.log(`${iface}: ${results[iface].join(', ')}`);
-  });
-  console.log(`TernSecure WebSocket server running on port ${PORT}`);
+  logNetworkAddresses(PORT);
 });
 
 process.on('SIGTERM', () => {
