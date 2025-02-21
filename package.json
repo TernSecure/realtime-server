@@ -2,18 +2,13 @@
   "name": "@tern-secure/realtime-server",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js"
+    "build": "rimraf server.js && tsc src/server.ts --module commonjs --outDir ./",
+    "start": "node server.js",
+    "dev": "ts-node src/server.ts"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TernSecure/realtime-server.git"
-  },
-  "dependencies": {
-    "@socket.io/admin-ui": "^0.5.1",
-    "@socket.io/redis-adapter": "^8.3.0",
-    "express": "^4.21.2",
-    "ioredis": "^5.5.0",
-    "socket.io": "^4.8.1"
   },
   "keywords": [
     "ternsecure-realtime-admin-ui",
@@ -27,10 +22,24 @@
     "url": "https://github.com/TernSecure/realtime-server/issues"
   },
   "homepage": "https://github.com/TernSecure/realtime-server#readme",
-  "type": "module",
+  "type": "commonjs",
   "description": "TernSecure Realtime Server",
+  "dependencies": {
+    "@socket.io/admin-ui": "^0.5.1",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "express": "^4.21.2",
+    "ioredis": "^5.5.0",
+    "socket.io": "^4.8.1"
+  },
   "optionalDependencies": {
     "bufferutil": "^4.0.9",
     "utf-8-validate": "^6.0.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "rimraf": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
   }
 }
