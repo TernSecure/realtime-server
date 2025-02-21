@@ -52,15 +52,26 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
             cd ${{ secrets.DEPLOY_PATH }}
 
-            # Install dependencies
-            npm install
-            npm run build
+            echo "Installing dependencies..."
+            if ! npm install; then
+              echo "Failed to install dependencies"
+              exit 1
+            fi
+
+            echo "Building application..."
+            if ! npm run build; then
+              echo "Failed to build application"
+              exit 1
+            fi
+
+            echo "Build completed successfully"
 
             # Set correct permissions
             sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
             sudo chmod -R 755 ${{ secrets.DEPLOY_PATH }}
 
             # Restart the service
+            echo "Restarting service..."
             sudo systemctl daemon-reload
             sudo systemctl enable ${{ secrets.SERVICE_NAME }}
             sudo systemctl restart ${{ secrets.SERVICE_NAME }}
