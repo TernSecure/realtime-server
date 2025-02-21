@@ -50,12 +50,11 @@ io.on("connection", (socket) => {
   presenceHandler.enterPresence();
 
   socket.on('disconnecting', (reason) => {
-
-    //todo
+    console.log(reason);
   });
 
   socket.on('disconnect', (reason) => {
-    //todo
+    console.log('Client disconnected:', socket.id);
   });
 
 });
