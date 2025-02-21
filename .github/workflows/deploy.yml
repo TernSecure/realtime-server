@@ -41,9 +41,10 @@ jobs:
             # Create and set permissions for new directory
             sudo mkdir -p ${{ secrets.DEPLOY_PATH }}
             sudo chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
+            sudo chmod 755 ${{ secrets.DEPLOY_PATH }}
           '
 
-          # Copy new code to VM
+          # Copy new code to Server
           scp -r ./* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
@@ -54,6 +55,7 @@ jobs:
 
             # Set correct permissions
             sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
+            sudo chmod -R 755 ${{ secrets.DEPLOY_PATH }}
 
             # Restart the service
             sudo systemctl daemon-reload
