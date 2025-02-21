@@ -5,7 +5,7 @@ import { instrument } from '@socket.io/admin-ui';
 import { networkInterfaces } from 'os';
 import { Redis } from 'ioredis';
 import { createAdapter } from "@socket.io/redis-adapter";
-import { socketMiddleware, handlePresence, SocketState } from './socket/';
+import { socketMiddleware, handlePresence, SocketState, handleConnection} from './socket/';
 
 const app = express();
 const httpServer = createServer(app);
@@ -41,10 +41,10 @@ instrument(io, {
 io.use(socketMiddleware);
 
 
-
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
+  const connectionHandler = handleConnection(io, socket, state);
   const presenceHandler = handlePresence(io, socket, state.clientPresence);
 
   presenceHandler.enterPresence();
@@ -55,6 +55,7 @@ io.on("connection", (socket) => {
 
   socket.on('disconnect', (reason) => {
     console.log('Client disconnected:', socket.id);
+    connectionHandler.cleanup();
   });
 
 });

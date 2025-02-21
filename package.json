@@ -2,7 +2,7 @@
   "name": "@tern-secure/realtime-server",
   "version": "1.0.0",
   "scripts": {
-    "build": "rimraf server.js && tsc src/server.ts --module commonjs --outDir ./",
+    "build": "rimraf dist && tsc --outDir ./dist",
     "start": "node server.js",
     "dev": "ts-node src/server.ts"
   },
