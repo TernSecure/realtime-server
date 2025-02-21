@@ -44,16 +44,16 @@ jobs:
           '
 
           # Copy new code to VM
-          scp -r ./* ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:${{ secrets.DEPLOY_PATH }}/
+          scp -r ./* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} '
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
             cd ${{ secrets.DEPLOY_PATH }}
 
             # Install dependencies
             npm install --production
 
             # Set correct permissions
-            sudo chown -R ${{ secrets.VM_USER }}:${{ secrets.VM_USER }} ${{ secrets.DEPLOY_PATH }}
+            sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
 
             # Restart the service
             sudo systemctl daemon-reload
