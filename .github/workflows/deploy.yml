@@ -44,7 +44,6 @@ jobs:
             # Create and set permissions for new directory
             sudo mkdir -p ${{ secrets.DEPLOY_PATH }}
             sudo chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
-            sudo chmod 755 ${{ secrets.DEPLOY_PATH }}
           '
 
           # Copy new code to Server
@@ -54,7 +53,8 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
 
             # Install dependencies
-            npm install --production
+            npm install
+            npm run build
 
             # Set correct permissions
             sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
@@ -65,6 +65,13 @@ jobs:
             sudo systemctl enable ${{ secrets.SERVICE_NAME }}
             sudo systemctl restart ${{ secrets.SERVICE_NAME }}
 
-            # Check service status
+            # Check service status and exit if failed
+            if ! sudo systemctl is-active --quiet ${{ secrets.SERVICE_NAME }}; then
+              echo "Service failed to start. Status:"
+              sudo systemctl status ${{ secrets.SERVICE_NAME }}
+              exit 1
+            fi
+
+            echo "Service status:"
             sudo systemctl status ${{ secrets.SERVICE_NAME }}
           '
