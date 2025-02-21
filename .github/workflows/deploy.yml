@@ -56,6 +56,10 @@ jobs:
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
+            # Verify Node and npm are available
+            echo "Node version: $(node -v)"
+            echo "NPM version: $(npm -v)"
+
             echo "Installing dependencies..."
             if ! npm install; then
               echo "Failed to install dependencies"
