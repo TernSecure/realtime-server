@@ -16,6 +16,11 @@ jobs:
         with: 
           node-version: '20.x'
 
+      - name: Install dependecies and build
+        run: |
+         npm install
+         npm run build
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
@@ -52,29 +57,14 @@ jobs:
           '
 
           # Copy new code to Server
-          scp -r ./* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
+          scp -r dist/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
             cd ${{ secrets.DEPLOY_PATH }}
 
-
-            # Verify Node and npm are available
-            echo "Node version: $(node -v)"
-            echo "NPM version: $(npm -v)"
-
-            echo "Installing dependencies..."
-            if ! npm install; then
-              echo "Failed to install dependencies"
-              exit 1
-            fi
-
-            echo "Building application..."
-            if ! npm run build; then
-              echo "Failed to build application"
-              exit 1
-            fi
-
-            echo "Build completed successfully"
+            # Install production dependencies on server
+            echo "Installing production dependencies..."
+            npm install --production
 
             # Set correct permissions
             sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
