@@ -29,6 +29,9 @@ jobs:
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
+            # First, change ownership of existing files
+            sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }}
+            
             # Stop the service
             sudo systemctl stop ${{ secrets.SERVICE_NAME }}
 
