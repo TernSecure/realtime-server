@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: 
+          node-version: '20.x'
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
@@ -52,16 +57,6 @@ jobs:
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
             cd ${{ secrets.DEPLOY_PATH }}
 
-            # Load NVM
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-            # Install Node if not present
-            if ! command -v node &> /dev/null; then
-              echo "Installing Node.js..."
-              nvm install 18  # or your preferred version
-              nvm use 18
-            fi
 
             # Verify Node and npm are available
             echo "Node version: $(node -v)"
