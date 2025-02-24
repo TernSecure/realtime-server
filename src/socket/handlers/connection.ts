@@ -26,8 +26,34 @@ export const handleConnection = (
 
   return {
     cleanup: () => {
-      state.clientSockets.delete(clientId);
+      console.log(`Client ${clientId} disconnecting, cleaning up...`);
+      
+      const sockets = state.clientSockets.get(clientId) || [];
+      const updatedSockets = sockets.filter(id => id !== socket.id);
+
+      if (updatedSockets.length === 0) {
+        // Remove all client data if this was the last socket
+        state.clientSockets.delete(clientId);
+
+        const clients = state.keyToClients.get(apiKey) || [];
+        const updatedClients = clients.filter(id => id !== clientId);
+
+        if (updatedClients.length === 0) {
+          state.keyToClients.delete(apiKey);
+        } else {
+          state.keyToClients.set(apiKey, updatedClients);
+        }
+      } else {
+        // Update remaining sockets
+        state.clientSockets.set(clientId, updatedSockets);
+      }
+
+      // Always clean up socket mapping
       state.socketToClient.delete(socket.id);
+      socket.leave(`key:${apiKey}`);
+
+      console.log('Cleanup completed for client:', clientId);
+      return updatedSockets.length === 0;
     }
   };
 };
