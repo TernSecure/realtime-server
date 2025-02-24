@@ -69,11 +69,6 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 
   presenceHandler.enterPresence();
 
-  socket.on('disconnecting', (reason) => {
-    console.log('disconnecting', reason);
-    connectionHandler.cleanup();
-  });
-
   socket.on('disconnect', (reason) => {
     console.log('Client disconnected:', socket.id, reason);
     
