@@ -34,6 +34,13 @@ export const handlePresence = (
     });
   };
 
+  const handleDisconnect = (): void => {
+    clientPresence.delete(clientId);
+    socket.broadcast.to(`key:${apiKey}`).emit('presence:leave', { 
+      clientId 
+    });
+  };
+
   socket.on('presence:update', ({ status, customMessage }: { status: string; customMessage: string }) => {
     const presence: Presence = {
       status,
@@ -55,7 +62,10 @@ export const handlePresence = (
     }
   });
 
+  socket.on('disconnect', handleDisconnect);
+
   return {
-    enterPresence
+    enterPresence,
+    cleanup: handleDisconnect
   };
 };
