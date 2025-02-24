@@ -51,10 +51,16 @@ export const handleConnection = (
 
       // Always clean up socket mapping
       state.socketToClient.delete(socket.id);
-      socket.leave(`key:${apiKey}`);
+      //socket.leave(`key:${apiKey}`);
       
       console.log('Cleanup completed for client:', clientId);
-      return isLastSocket;
+      
+      return {
+        isLastSocket,
+        leaveRoom: () => {
+          socket.leave(`key:${apiKey}`);
+        }
+      }
     }
   };
 };
