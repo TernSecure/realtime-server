@@ -70,15 +70,13 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
   presenceHandler.enterPresence();
 
   socket.on('disconnecting', (reason) => {
-    console.log(reason);
+    console.log('disconnecting', reason);
   });
 
   socket.on('disconnect', (reason) => {
     console.log('Client disconnected:', socket.id, reason);
-    const isLastSocket = connectionHandler.cleanup();
-    presenceHandler.cleanup(isLastSocket);
+    connectionHandler.cleanup();
   });
-
 });
 
 
