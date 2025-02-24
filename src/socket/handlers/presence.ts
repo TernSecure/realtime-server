@@ -28,16 +28,17 @@ export const handlePresence = (
 
     socket.emit('presence:sync', existingMembers);
 
-    socket.broadcast.to(`key:${apiKey}`).emit('presence:enter', {
+    io.to(`key:${apiKey}`).emit('presence:enter', {
       clientId,
       presence
     });
   };
 
-  const handleDisconnect = (): void => {
+  const cleanup = (): void => {
     clientPresence.delete(clientId);
-    socket.broadcast.to(`key:${apiKey}`).emit('presence:leave', { 
-      clientId 
+    
+    io.to(`key:${apiKey}`).emit('presence:leave', {
+      clientId
     });
   };
 
@@ -62,10 +63,9 @@ export const handlePresence = (
     }
   });
 
-  socket.on('disconnect', handleDisconnect);
 
   return {
     enterPresence,
-    cleanup: handleDisconnect
+    cleanup
   };
 };

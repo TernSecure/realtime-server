@@ -74,7 +74,7 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('Client disconnected:', socket.id);
+    console.log('Client disconnected:', socket.id, reason);
     presenceHandler.cleanup(); 
     connectionHandler.cleanup();
   });
