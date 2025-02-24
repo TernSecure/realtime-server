@@ -71,11 +71,13 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 
   socket.on('disconnecting', (reason) => {
     console.log('disconnecting', reason);
+    connectionHandler.cleanup();
   });
 
   socket.on('disconnect', (reason) => {
     console.log('Client disconnected:', socket.id, reason);
-    connectionHandler.cleanup();
+    const isLastSocket = connectionHandler.cleanup();
+    presenceHandler.cleanup(isLastSocket);
   });
 });
 

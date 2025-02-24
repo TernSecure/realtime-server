@@ -34,6 +34,16 @@ export const handlePresence = (
     });
   };
 
+  const cleanup = (isLastSocket: boolean): void => {
+    if (isLastSocket) {
+      io.to(`key:${apiKey}`).emit('presence:leave', {
+        clientId
+      });
+
+      clientPresence.delete(clientId);
+    }
+  };
+
   socket.on('presence:update', ({ status, customMessage }: { status: string; customMessage: string }) => {
     const presence: Presence = {
       status,
@@ -57,6 +67,7 @@ export const handlePresence = (
 
 
   return {
-    enterPresence
+    enterPresence,
+    cleanup
   };
 };

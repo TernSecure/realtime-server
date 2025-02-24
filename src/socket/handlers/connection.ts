@@ -36,12 +36,6 @@ export const handleConnection = (
         // Remove all client data if this was the last socket
         state.clientSockets.delete(clientId);
 
-        state.clientPresence.delete(clientId);
-        
-        io.to(`key:${apiKey}`).emit('presence:leave', {
-          clientId
-        });
-
         const clients = state.keyToClients.get(apiKey) || [];
         const updatedClients = clients.filter(id => id !== clientId);
 
@@ -58,7 +52,7 @@ export const handleConnection = (
       // Always clean up socket mapping
       state.socketToClient.delete(socket.id);
       socket.leave(`key:${apiKey}`);
-
+      
       console.log('Cleanup completed for client:', clientId);
       return isLastSocket;
     }
