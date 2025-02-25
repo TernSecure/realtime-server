@@ -100,3 +100,8 @@ export type TypedSocket = Socket<
   InterServerEvents,
   SocketData
 >;
+
+
+export const SOCKET_MAP_PREFIX = 'socket:map:';
+export const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
+export const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';

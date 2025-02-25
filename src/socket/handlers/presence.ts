@@ -1,6 +1,9 @@
 import { Server, Socket } from 'socket.io';
 import { Redis } from 'ioredis';
-import { Presence } from '../../types';
+import {
+  Presence,
+  API_KEY_CLIENTS_PREFIX
+ } from '../../types';
 
 const PRESENCE_PREFIX = 'presence:';
 const PRESENCE_TTL = 70000;
@@ -11,7 +14,7 @@ export const handlePresence = (
   redis: Redis
 ) => {
   const { clientId, apiKey } = socket.handshake.auth;
-  const presenceKey = `${PRESENCE_PREFIX}${clientId}`;
+  const presenceKey = `${apiKey}:${PRESENCE_PREFIX}${clientId}`;
 
   const enterPresence = async (): Promise<void> => {
     console.log(`Initializing presence for client ${clientId} with socket ${socket.id}`);
@@ -20,18 +23,18 @@ export const handlePresence = (
       status: 'online',
       customMessage: '',
       lastUpdated: new Date().toISOString(),
-      socketId: socket.id
+      socketId: socket.id,
     };
 
     await redis.hset(presenceKey, presence);
     await redis.expire(presenceKey, PRESENCE_TTL);
     
-    const apiKeyClientsKey = `apikey:clients:${apiKey}`;
+    const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
     const members = await redis.smembers(apiKeyClientsKey);
 
     const existingMembers = await Promise.all(
       members.map(async (memberId) => {
-        const memberPresence = await redis.hgetall(`${PRESENCE_PREFIX}${memberId}`);
+        const memberPresence = await redis.hgetall(`${apiKey}:${PRESENCE_PREFIX}${memberId}`);
         return memberPresence ? {
           clientId: memberId,
           presence: memberPresence

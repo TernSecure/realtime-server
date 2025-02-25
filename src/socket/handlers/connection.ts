@@ -1,10 +1,10 @@
 import { Server, Socket } from 'socket.io';
 import { Redis } from 'ioredis';
-import { SocketState } from '../state';
-
-const SOCKET_MAP_PREFIX = 'socket:map:';
-const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
-const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';
+import {
+  CLIENT_SOCKETS_PREFIX,
+  SOCKET_MAP_PREFIX,
+  API_KEY_CLIENTS_PREFIX
+} from '../../types'
 
 export const handleConnection = (
   io: Server,
@@ -14,8 +14,8 @@ export const handleConnection = (
   const { clientId, apiKey } = socket.handshake.auth;
 
   // Store socket mapping in Redis
-  const socketMapKey = `${SOCKET_MAP_PREFIX}${socket.id}`;
-  const clientSocketsKey = `${CLIENT_SOCKETS_PREFIX}${clientId}`;
+  const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socket.id}`;
+  const clientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${clientId}`;
   const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
 
   // Using Promise.all for parallel Redis operations
