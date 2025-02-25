@@ -4,7 +4,13 @@ import express = require('express');
 import { instrument } from '@socket.io/admin-ui';
 import { Redis } from 'ioredis';
 import { createAdapter } from "@socket.io/redis-adapter";
-import { socketMiddleware, handlePresence, SocketState, handleConnection, logNetworkAddresses} from './socket/';
+import { 
+  socketMiddleware,
+  handlePresence,
+  SocketState,
+  handleConnection,
+  logNetworkAddresses
+} from './socket/';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -25,7 +31,7 @@ const app = express();
 const httpServer = createServer(app);
 const redis = new Redis();
 const redisSub = redis.duplicate();
-const state = new SocketState();
+//const state = new SocketState();
 
 app.use(express.json());
 
@@ -64,15 +70,15 @@ io.use(socketMiddleware);
 io.on("connection", (socket: Socket<TypedSocket>) => {
   console.log("Client connected:", socket.id);
 
-  const connectionHandler = handleConnection(io, socket, state);
-  const presenceHandler = handlePresence(io, socket, state.clientPresence);
+  const connectionHandler = handleConnection(io, socket, redis);
+  const presenceHandler = handlePresence(io, socket, redis);
 
   presenceHandler.enterPresence();
 
-  socket.on('disconnect', (reason) => {
+  socket.on('disconnect', async (reason) => {
     console.log('Client disconnected:', socket.id, reason);
     
-    const { isLastSocket, leaveRoom } = connectionHandler.cleanup();
+    const { isLastSocket, leaveRoom } = await connectionHandler.cleanup();
     
     presenceHandler.cleanup(isLastSocket);
 

@@ -1,14 +1,19 @@
 import { Server, Socket } from 'socket.io';
+import { Redis } from 'ioredis';
 import { Presence } from '../../types';
+
+const PRESENCE_PREFIX = 'presence:';
+const PRESENCE_TTL = 70000;
 
 export const handlePresence = (
   io: Server,
   socket: Socket,
-  clientPresence: Map<string, Presence>
+  redis: Redis
 ) => {
   const { clientId, apiKey } = socket.handshake.auth;
+  const presenceKey = `${PRESENCE_PREFIX}${clientId}`;
 
-  const enterPresence = (): void => {
+  const enterPresence = async (): Promise<void> => {
     console.log(`Initializing presence for client ${clientId} with socket ${socket.id}`);
     
     const presence: Presence = {
@@ -17,14 +22,22 @@ export const handlePresence = (
       lastUpdated: new Date().toISOString(),
       socketId: socket.id
     };
-    
-    clientPresence.set(clientId, presence);
 
-    const existingMembers = Array.from(clientPresence.entries())
-      .map(([clientId, presence]) => ({ 
-        clientId, 
-        presence 
-      }));
+    await redis.hset(presenceKey, presence);
+    await redis.expire(presenceKey, PRESENCE_TTL);
+    
+    const apiKeyClientsKey = `apikey:clients:${apiKey}`;
+    const members = await redis.smembers(apiKeyClientsKey);
+
+    const existingMembers = await Promise.all(
+      members.map(async (memberId) => {
+        const memberPresence = await redis.hgetall(`${PRESENCE_PREFIX}${memberId}`);
+        return memberPresence ? {
+          clientId: memberId,
+          presence: memberPresence
+        } : null;
+      })
+    ).then(results => results.filter(Boolean));
 
     socket.emit('presence:sync', existingMembers);
 
@@ -34,17 +47,17 @@ export const handlePresence = (
     });
   };
 
-  const cleanup = (isLastSocket: boolean): void => {
+  const cleanup = async (isLastSocket: boolean): Promise<void> => {
     if (isLastSocket) {
       io.to(`key:${apiKey}`).emit('presence:leave', {
         clientId
       });
 
-      clientPresence.delete(clientId);
+      await redis.del(presenceKey);
     }
   };
 
-  socket.on('presence:update', ({ status, customMessage }: { status: string; customMessage: string }) => {
+  socket.on('presence:update', async ({ status, customMessage }: { status: string; customMessage: string }) => {
     const presence: Presence = {
       status,
       customMessage,
@@ -52,17 +65,19 @@ export const handlePresence = (
       socketId: socket.id
     };
 
-    clientPresence.set(clientId, presence);
+    await redis.hset(presenceKey, presence);
+    await redis.expire(presenceKey, PRESENCE_TTL);
 
     io.to(`key:${apiKey}`).emit('presence:update', { clientId, presence });
   });
 
-  socket.on('presence:heartbeat', () => {
-    const presence = clientPresence.get(clientId);
-    if (presence) {
-      presence.lastHeartbeat = Date.now();
-      presence.lastUpdated = new Date().toISOString();
-    }
+  socket.on('presence:heartbeat', async () => {
+    const now = Date.now();
+    await redis.hset(presenceKey, {
+      lastHeartbeat: now,
+      lastUpdated: new Date().toISOString()
+    });
+    await redis.expire(presenceKey, PRESENCE_TTL);
   });
 
 

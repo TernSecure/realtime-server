@@ -1,65 +1,88 @@
 import { Server, Socket } from 'socket.io';
+import { Redis } from 'ioredis';
 import { SocketState } from '../state';
+
+const SOCKET_MAP_PREFIX = 'socket:map:';
+const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
+const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';
 
 export const handleConnection = (
   io: Server,
   socket: Socket,
-  state: SocketState
+  redis: Redis
 ) => {
   const { clientId, apiKey } = socket.handshake.auth;
 
-  // Track client sockets
-  const existingSockets = state.clientSockets.get(clientId) || [];
-  state.clientSockets.set(clientId, [...existingSockets, socket.id]);
+  // Store socket mapping in Redis
+  const socketMapKey = `${SOCKET_MAP_PREFIX}${socket.id}`;
+  const clientSocketsKey = `${CLIENT_SOCKETS_PREFIX}${clientId}`;
+  const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
 
-  // Map socket to client info
-  state.socketToClient.set(socket.id, { clientId, apiKey });
-
-  // Group clients by API key
-  const existingClients = state.keyToClients.get(apiKey) || [];
-  if (!existingClients.includes(clientId)) {
-    state.keyToClients.set(apiKey, [...existingClients, clientId]);
-  }
+  // Using Promise.all for parallel Redis operations
+  Promise.all([
+    // Map socket to client info
+    redis.hset(socketMapKey, {
+      clientId,
+      apiKey,
+      socketId: socket.id
+    }),
+    
+    // Add socket to client's socket list
+    redis.sadd(clientSocketsKey, socket.id),
+    
+    // Add client to API key's client list
+    redis.sadd(apiKeyClientsKey, clientId)
+  ]).catch(err => {
+    console.error('Redis connection state error:', err);
+  });
 
   // Join API key room
   socket.join(`key:${apiKey}`);
 
   return {
-    cleanup: () => {
+    cleanup: async () => {
       console.log(`Client ${clientId} disconnecting, cleaning up...`);
       
-      const sockets = state.clientSockets.get(clientId) || [];
-      const updatedSockets = sockets.filter(id => id !== socket.id);
-      const isLastSocket = updatedSockets.length === 0;
+      try {
+        // Get remaining sockets for this client
+        const remainingSockets = await redis.srem(clientSocketsKey, socket.id)
+          .then(() => redis.smembers(clientSocketsKey));
+        
+        const isLastSocket = remainingSockets.length === 0;
 
-      if (isLastSocket) {
-        // Remove all client data if this was the last socket
-        state.clientSockets.delete(clientId);
-
-        const clients = state.keyToClients.get(apiKey) || [];
-        const updatedClients = clients.filter(id => id !== clientId);
-
-        if (updatedClients.length === 0) {
-          state.keyToClients.delete(apiKey);
-        } else {
-          state.keyToClients.set(apiKey, updatedClients);
+        if (isLastSocket) {
+          // Clean up all client data if this was the last socket
+          await Promise.all([
+            redis.del(clientSocketsKey),
+            redis.srem(apiKeyClientsKey, clientId),
+            // Check if this was the last client for this API key
+            redis.smembers(apiKeyClientsKey).then(async (clients) => {
+              if (clients.length === 0) {
+                await redis.del(apiKeyClientsKey);
+              }
+            })
+          ]);
         }
-      } else {
-        // Update remaining sockets
-        state.clientSockets.set(clientId, updatedSockets);
-      }
 
-      // Always clean up socket mapping
-      state.socketToClient.delete(socket.id);
-      //socket.leave(`key:${apiKey}`);
-      
-      console.log('Cleanup completed for client:', clientId);
-      
-      return {
-        isLastSocket,
-        leaveRoom: () => {
-          socket.leave(`key:${apiKey}`);
-        }
+        // Always clean up socket mapping
+        await redis.del(socketMapKey);
+        
+        console.log('Cleanup completed for client:', clientId);
+        
+        return {
+          isLastSocket,
+          leaveRoom: () => {
+            socket.leave(`key:${apiKey}`);
+          }
+        };
+      } catch (err) {
+        console.error('Redis cleanup error:', err);
+        return {
+          isLastSocket: false,
+          leaveRoom: () => {
+            socket.leave(`key:${apiKey}`);
+          }
+        };
       }
     }
   };
