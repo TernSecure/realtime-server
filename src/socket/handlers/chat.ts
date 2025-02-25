@@ -18,7 +18,7 @@ export const handleChat = (
   socket: Socket<any, any, any, SocketData>,
   redis: Redis
 ) => {
-  const { clientId, apiKey } = socket.data
+  const { clientId, apiKey, socketId } = socket.data
 
 
   const joinPrivateRoom = async (targetClientId: string): Promise<string | null > => {
@@ -109,7 +109,7 @@ export const handleChat = (
       // Leave all rooms
       const rooms = Array.from(socket.rooms);
       for (const room of rooms) {
-        if (room !== socket.id) {
+        if (room !== socketId) {
           const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${room}`;
           await redis.srem(roomKey, clientId);
           socket.leave(room);
