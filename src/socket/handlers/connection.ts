@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { Redis } from 'ioredis';
+import type { SocketData } from '../../types';
 import {
   CLIENT_SOCKETS_PREFIX,
   SOCKET_MAP_PREFIX,
@@ -8,13 +9,13 @@ import {
 
 export const handleConnection = (
   io: Server,
-  socket: Socket,
+  socket: Socket<any, any, any, SocketData>,
   redis: Redis
 ) => {
-  const { clientId, apiKey } = socket.handshake.auth;
+  const { clientId, apiKey, socketId } = socket.data;
 
   // Store socket mapping in Redis
-  const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socket.id}`;
+  const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socketId}`;
   const clientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${clientId}`;
   const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
 
@@ -24,11 +25,11 @@ export const handleConnection = (
     redis.hset(socketMapKey, {
       clientId,
       apiKey,
-      socketId: socket.id
+      socketId
     }),
     
     // Add socket to client's socket list
-    redis.sadd(clientSocketsKey, socket.id),
+    redis.sadd(clientSocketsKey, socketId),
     
     // Add client to API key's client list
     redis.sadd(apiKeyClientsKey, clientId)
@@ -45,7 +46,7 @@ export const handleConnection = (
       
       try {
         // Get remaining sockets for this client
-        const remainingSockets = await redis.srem(clientSocketsKey, socket.id)
+        const remainingSockets = await redis.srem(clientSocketsKey, socketId)
           .then(() => redis.smembers(clientSocketsKey));
         
         const isLastSocket = remainingSockets.length === 0;
