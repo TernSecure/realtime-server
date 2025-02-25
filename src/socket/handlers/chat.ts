@@ -1,27 +1,41 @@
 import { Server, Socket } from 'socket.io';
-import { SocketState } from '../state';
 import { Redis } from 'ioredis';
-import type { ChatMessage } from '../../types'
+import type {
+  ChatMessage,
+  SocketData
+} from '../../types'
+
+import { 
+  CHAT_ROOMS_PREFIX,
+  CLIENT_SOCKETS_PREFIX,
+  API_KEY_CLIENTS_PREFIX,
+  OFFLINE_MESSAGES_PREFIX
+} from '../../types';
 
 
 export const handleChat = (
   io: Server,
-  socket: Socket, 
-  state: SocketState,
+  socket: Socket<any, any, any, SocketData>,
   redis: Redis
 ) => {
-  const { clientId, apiKey } = socket.handshake.auth; 
+  const { clientId, apiKey } = socket.data
 
 
-  const joinPrivateRoom = (targetClientId: string): string | null => {
+  const joinPrivateRoom = async (targetClientId: string): Promise<string | null > => {
 
-    const apiKeyClients = state.keyToClients.get(apiKey) || [];
-    if (!apiKeyClients.includes(targetClientId)) {
-      return null;  
+    const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
+    const exists = await redis.sismember(apiKeyClientsKey, targetClientId);
+
+    if (!exists) {
+      return null;
     }
 
     const roomId = [clientId, targetClientId].sort().join('_');
+    const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${roomId}`;
+
+    await redis.sadd(roomKey, clientId, targetClientId);
     socket.join(roomId);
+
     return roomId;
   };
 
@@ -29,7 +43,7 @@ export const handleChat = (
   socket.on('chat:private', async (data: { targetId: string; message: string }) => {
     try {
       const { targetId, message } = data;
-      const roomId = joinPrivateRoom(targetId);
+      const roomId = await joinPrivateRoom(targetId);
 
       if (!roomId) {
         socket.emit('chat:error', {
@@ -47,16 +61,15 @@ export const handleChat = (
         apiKey
       };
 
-      const recipientSockets = state.clientSockets.get(targetId) || [];
+      const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
+      const recipientSockets = await redis.smembers(recipientSocketsKey);
 
       if(recipientSockets.length > 0) {
         io.to(roomId).emit('chat:message', messageData);
         socket.emit('chat:delivered', { messageId: messageData.messageId });
       } else {
-        await redis.lpush(
-          `offline_messages:${targetId}`,
-          JSON.stringify(messageData)
-        );
+        const offlineKey = `${apiKey}:${OFFLINE_MESSAGES_PREFIX}${targetId}`;
+        await redis.lpush(offlineKey, JSON.stringify(messageData));
       }
 
     } catch (error) {
@@ -66,8 +79,8 @@ export const handleChat = (
   });
 
   // Handle typing indicator within same API key
-  socket.on('chat:typing', ({ targetId, isTyping }: { targetId: string; isTyping: boolean }) => {
-    const roomId = joinPrivateRoom(targetId);
+  socket.on('chat:typing', async ({ targetId, isTyping }: { targetId: string; isTyping: boolean }) => {
+    const roomId = await joinPrivateRoom(targetId);
     if (roomId) {
       socket.to(roomId).emit('chat:typing', {
         senderId: clientId, 
@@ -77,21 +90,31 @@ export const handleChat = (
   });
 
   const deliverOfflineMessages = async () => {
-    const messages = await redis.lrange(`offline_messages:${clientId}`, 0, -1);
+    const offlineKey = `${apiKey}:${OFFLINE_MESSAGES_PREFIX}${clientId}`;
+    const messages = await redis.lrange(offlineKey, 0, -1);
+
     if (messages.length > 0) {
-      messages.forEach(msg => {
+      for (const msg of messages) {
         const messageData = JSON.parse(msg);
         socket.emit('chat:message', messageData);
-      });
-      await redis.del(`offline_messages:${clientId}`);
+      }
+      await redis.del(offlineKey);
     }
   };
 
   deliverOfflineMessages().catch(console.error);
 
   return {
-    cleanup: () => {
-      socket.rooms.forEach(room => socket.leave(room));
+    cleanup: async () => {
+      // Leave all rooms
+      const rooms = Array.from(socket.rooms);
+      for (const room of rooms) {
+        if (room !== socket.id) {
+          const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${room}`;
+          await redis.srem(roomKey, clientId);
+          socket.leave(room);
+        }
+      }
     }
   };
 };

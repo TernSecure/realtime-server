@@ -105,3 +105,5 @@ export type TypedSocket = Socket<
 export const SOCKET_MAP_PREFIX = 'socket:map:';
 export const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
 export const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';
+export const OFFLINE_MESSAGES_PREFIX = 'offline:messages:';
+export const CHAT_ROOMS_PREFIX = 'chat:rooms:';

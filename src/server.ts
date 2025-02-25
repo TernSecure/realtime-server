@@ -7,7 +7,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { 
   socketMiddleware,
   handlePresence,
-  SocketState,
+  handleChat,
   handleConnection,
   logNetworkAddresses
 } from './socket/';
@@ -72,7 +72,9 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 
   const connectionHandler = handleConnection(io, socket, redis);
   const presenceHandler = handlePresence(io, socket, redis);
+  const chatHandler = handleChat(io, socket, redis);
 
+  
   presenceHandler.enterPresence();
 
   socket.on('disconnect', async (reason) => {
@@ -80,7 +82,10 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
     
     const { isLastSocket, leaveRoom } = await connectionHandler.cleanup();
     
-    presenceHandler.cleanup(isLastSocket);
+    await Promise.all([
+      presenceHandler.cleanup(isLastSocket),
+      chatHandler.cleanup()
+    ]);
 
     leaveRoom();
   });
