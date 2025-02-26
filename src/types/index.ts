@@ -69,6 +69,7 @@ export interface ChatMessage {
   roomId: string;
   message: string;
   fromId: string;
+  toId: string;
   timestamp: string;
   fromData?: ClientAdditionalData;
   toData?: ClientAdditionalData;

@@ -93,6 +93,7 @@ export const handleChat = (
         roomId: safeRoomId,
         message,
         fromId: clientId,
+        toId: targetId,
         timestamp: new Date().toISOString(),
         fromData,
         toData,
@@ -119,6 +120,7 @@ export const handleChat = (
         const offlineKey = `${apiKey}:${OFFLINE_MESSAGES_PREFIX}${targetId}`;
         await redis.lpush(offlineKey, JSON.stringify(messageData));
 
+        socket.emit('chat:message', messageData);
         socket.emit('chat:delivered', { messageId: messageData.messageId });
       }
     } catch (error) {
