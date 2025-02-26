@@ -5,6 +5,18 @@ export interface ClientInfo {
   apiKey: string;
 }
 
+export interface ClientAdditionalData {
+  name?: string;
+  avatar?: string;
+  email?: string;
+}
+
+export interface SocketData {
+  clientId: string;
+  apiKey: string;
+  socketId: string;
+}
+
 export interface Presence {
   status: string;
   customMessage: string;
@@ -56,9 +68,10 @@ export interface ChatMessage {
   messageId: string;
   roomId: string;
   message: string;
-  senderId: string;
+  fromId: string;
   timestamp: string;
-  apiKey: string; 
+  fromData?: ClientAdditionalData;
+  toData?: ClientAdditionalData;
 }
 
 
@@ -88,12 +101,6 @@ export interface InterServerEvents {
   ping: () => void;
 }
 
-export interface SocketData {
-  clientId: string;
-  apiKey: string;
-  socketId: string;
-}
-
 export type TypedSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
@@ -107,3 +114,4 @@ export const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
 export const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';
 export const OFFLINE_MESSAGES_PREFIX = 'offline:messages:';
 export const CHAT_ROOMS_PREFIX = 'chat:rooms:';
+export const CLIENT_ADDITIONAL_DATA_PREFIX = 'client:additional:data:';

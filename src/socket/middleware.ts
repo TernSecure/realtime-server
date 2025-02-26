@@ -20,13 +20,15 @@ export const socketMiddleware = (
       return next(new Error('Authentication failed: Missing clientId or apiKey'));
     }
 
+
     socket.data = {
       clientId,
       apiKey,
-      socketId: socket.id
+      socketId: socket.id,
     };
   
     console.log(`Authentication successful for client ${maskSensitive(clientId)}`);
     console.log(`Using API key: ${maskSensitive(apiKey)}`);
+
     next();
 };

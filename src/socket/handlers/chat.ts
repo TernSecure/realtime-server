@@ -2,14 +2,16 @@ import { Server, Socket } from 'socket.io';
 import { Redis } from 'ioredis';
 import type {
   ChatMessage,
-  SocketData
+  SocketData, 
+  ClientAdditionalData
 } from '../../types'
 
 import { 
   CHAT_ROOMS_PREFIX,
   CLIENT_SOCKETS_PREFIX,
   API_KEY_CLIENTS_PREFIX,
-  OFFLINE_MESSAGES_PREFIX
+  OFFLINE_MESSAGES_PREFIX,
+  CLIENT_ADDITIONAL_DATA_PREFIX
 } from '../../types';
 
 
@@ -20,11 +22,39 @@ export const handleChat = (
 ) => {
   const { clientId, apiKey, socketId } = socket.data
 
+  const storeClientData = async (userId: string, data?: ClientAdditionalData) => {
+    if (!data) return;
+
+    if (Object.keys(data).length > 0) {
+      const clientDataKey = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${userId}`;
+      await redis.set(clientDataKey, JSON.stringify(data));
+      await redis.expire(clientDataKey, 60 * 60 * 24 * 30);
+    }
+  };
+
+  const getClientData = async (userId: string): Promise<ClientAdditionalData | undefined> => {
+    const clientDataKey = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${userId}`;
+    const clientData = await redis.get(clientDataKey);
+
+    if(clientData) {
+      return JSON.parse(clientData);
+    }
+    return undefined;
+  };
+
+  socket.on('chat:Profile_update', async (data: ClientAdditionalData) => {
+    try {
+      await storeClientData(clientId, data);
+      socket.emit('chat:Profile_update');
+    } catch (error) {
+      console.error('Error updating client data:', error);
+      socket.emit('chat:error', { message: 'Failed to update client data' });
+    }
+  });
+    
+
 
   const joinPrivateRoom = async (targetClientId: string): Promise<string | null > => {
-
-    //const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
-    //const exists = await redis.sismember(apiKeyClientsKey, targetClientId);
 
     const roomId = [clientId, targetClientId].sort().join('_');
     const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${roomId}`;
@@ -40,19 +70,32 @@ export const handleChat = (
   };
 
   // Handle private message
-  socket.on('chat:private', async (data: { targetId: string; message: string }) => {
+  socket.on('chat:private', async (data: { 
+    targetId: string; 
+    message: string;
+    clientAdditionalData?: ClientAdditionalData
+  }) => {
     try {
-      const { targetId, message } = data;
+      const { targetId, message, clientAdditionalData } = data;
+
+      if (clientAdditionalData) {
+        await storeClientData(clientId, clientAdditionalData);
+      }
+
       const roomId = await joinPrivateRoom(targetId);
       const safeRoomId = roomId || [clientId, targetId].sort().join('_');
+
+      const fromData = await getClientData(clientId);
+      const toData = await getClientData(targetId);
 
       const messageData: ChatMessage = {
         messageId: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         roomId: safeRoomId,
         message,
-        senderId: clientId,
+        fromId: clientId,
         timestamp: new Date().toISOString(),
-        apiKey
+        fromData,
+        toData,
       };
 
       const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
@@ -89,7 +132,7 @@ export const handleChat = (
     const roomId = await joinPrivateRoom(targetId);
     if (roomId) {
       socket.to(roomId).emit('chat:typing', {
-        senderId: clientId, 
+        fromId: clientId, 
         isTyping 
       });
     }
@@ -102,6 +145,22 @@ export const handleChat = (
     if (messages.length > 0) {
       for (const msg of messages) {
         const messageData = JSON.parse(msg);
+
+
+        if (!messageData.fromData) {
+          const senderData = await getClientData(messageData.senderId);
+          if (senderData) {
+            messageData.fromData = senderData;
+          }
+        }
+
+
+        if (!messageData.toData) {
+          const recipientData = await getClientData(clientId);
+          if (recipientData) {
+            messageData.toData = recipientData;
+          }
+        }
 
         const roomId = messageData.roomId;
         socket.join(roomId);
