@@ -86,13 +86,15 @@ export interface ServerToClientEvents {
   'chat:message': (message: ChatMessage) => void;
   'chat:error': (error: { message: string }) => void;
   'chat:delivered': (data: { messageId: string }) => void;
-  'typing:indicator': (data: { senderId: string; isTyping: boolean }) => void;
+  'chat:profile_updated': () => void;
+  'chat:typing': (data: { fromId: string; isTyping: boolean }) => void;
 }
 
 //events client sends to server
 export interface ClientToServerEvents {
   'chat:private': (data: { targetId: string; message: string }) => void;
   'chat:typing': (data: { targetId: string; isTyping: boolean }) => void;
+  'chat:profile_update': (data: ClientAdditionalData) => void;
   
   'presence:update': (status: string) => void;
 }
@@ -115,4 +117,4 @@ export const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
 export const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';
 export const OFFLINE_MESSAGES_PREFIX = 'offline:messages:';
 export const CHAT_ROOMS_PREFIX = 'chat:rooms:';
-export const CLIENT_ADDITIONAL_DATA_PREFIX = 'client:additional:data:';
+export const CLIENT_ADDITIONAL_DATA_PREFIX = 'client:data:';

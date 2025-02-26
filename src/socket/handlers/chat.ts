@@ -95,12 +95,14 @@ export const handleChat = (
     }
   });
 
-  socket.on('chat:Profile_update', async (data: ClientAdditionalData) => {
+  socket.on('chat:profile_update', async (data: ClientAdditionalData) => {
     try {
+      console.log('Received profile update:', data, 'for client:', clientId);
 
       if (data) {
       await storeClientData(clientId, data);
-      socket.emit('chat:Profile_updated');
+      socket.emit('chat:profile_updated');
+      console.log('Profile updated for client:', clientId);
       }
     } catch (error) {
       console.error('Error updating client data:', error);
@@ -132,7 +134,9 @@ async function storeClientData(clientId: string, data: ClientAdditionalData) {
     }, {} as Record<string, any>);
     
     if (Object.keys(cleanData).length > 0) {
-      await redis.set(key, JSON.stringify(cleanData));
+      // Convert to JSON string before storing
+      const jsonData = JSON.stringify(cleanData);
+      await redis.set(key, jsonData);
       console.log(`Stored client data for ${clientId}:`, cleanData);
     }
   } catch (error) {
