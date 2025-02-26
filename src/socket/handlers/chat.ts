@@ -125,20 +125,10 @@ async function storeClientData(clientId: string, data: ClientAdditionalData) {
   try {
     const key = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${clientId}`;
     
-    // Clean up the data to remove undefined/null values
-    const cleanData = Object.entries(data).reduce((acc, [k, v]) => {
-      if (v !== undefined && v !== null) {
-        acc[k] = v;
-      }
-      return acc;
-    }, {} as Record<string, any>);
-    
-    if (Object.keys(cleanData).length > 0) {
-      // Convert to JSON string before storing
-      const jsonData = JSON.stringify(cleanData);
-      await redis.set(key, jsonData);
-      console.log(`Stored client data for ${clientId}:`, cleanData);
-    }
+    const jsonData = JSON.stringify(data);
+    await redis.set(key, jsonData);
+    console.log(`Stored client data for ${clientId}:`, data);
+    return true;
   } catch (error) {
     console.error('Error storing client data:', error);
     throw error;
