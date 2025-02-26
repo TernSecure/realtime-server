@@ -21,38 +21,7 @@ export const handleChat = (
   redis: Redis
 ) => {
   const { clientId, apiKey, socketId } = socket.data
-
-  const storeClientData = async (userId: string, data?: ClientAdditionalData) => {
-    if (!data) return;
-
-    if (Object.keys(data).length > 0) {
-      const clientDataKey = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${userId}`;
-      await redis.set(clientDataKey, JSON.stringify(data));
-      await redis.expire(clientDataKey, 60 * 60 * 24 * 30);
-    }
-  };
-
-  const getClientData = async (userId: string): Promise<ClientAdditionalData | undefined> => {
-    const clientDataKey = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${userId}`;
-    const clientData = await redis.get(clientDataKey);
-
-    if(clientData) {
-      return JSON.parse(clientData);
-    }
-    return undefined;
-  };
-
-  socket.on('chat:Profile_update', async (data: ClientAdditionalData) => {
-    try {
-      await storeClientData(clientId, data);
-      socket.emit('chat:Profile_update');
-    } catch (error) {
-      console.error('Error updating client data:', error);
-      socket.emit('chat:error', { message: 'Failed to update client data' });
-    }
-  });
     
-
 
   const joinPrivateRoom = async (targetClientId: string): Promise<string | null > => {
 
@@ -73,20 +42,17 @@ export const handleChat = (
   socket.on('chat:private', async (data: { 
     targetId: string; 
     message: string;
-    clientAdditionalData?: ClientAdditionalData
   }) => {
     try {
-      const { targetId, message, clientAdditionalData } = data;
+      const { targetId, message } = data;
 
-      if (clientAdditionalData) {
-        await storeClientData(clientId, clientAdditionalData);
-      }
+      const fromData = await getClientData(clientId);
+      const toData = await getClientData(targetId);
+
 
       const roomId = await joinPrivateRoom(targetId);
       const safeRoomId = roomId || [clientId, targetId].sort().join('_');
 
-      const fromData = await getClientData(clientId);
-      const toData = await getClientData(targetId);
 
       const messageData: ChatMessage = {
         messageId: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -129,6 +95,19 @@ export const handleChat = (
     }
   });
 
+  socket.on('chat:Profile_update', async (data: ClientAdditionalData) => {
+    try {
+
+      if (data) {
+      await storeClientData(clientId, data);
+      socket.emit('chat:Profile_updated');
+      }
+    } catch (error) {
+      console.error('Error updating client data:', error);
+      socket.emit('chat:error', { message: 'Failed to update client data' });
+    }
+  });
+
   // Handle typing indicator within same API key
   socket.on('chat:typing', async ({ targetId, isTyping }: { targetId: string; isTyping: boolean }) => {
     const roomId = await joinPrivateRoom(targetId);
@@ -139,6 +118,44 @@ export const handleChat = (
       });
     }
   });
+
+async function storeClientData(clientId: string, data: ClientAdditionalData) {
+  try {
+    const key = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${clientId}`;
+    
+    // Clean up the data to remove undefined/null values
+    const cleanData = Object.entries(data).reduce((acc, [k, v]) => {
+      if (v !== undefined && v !== null) {
+        acc[k] = v;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+    
+    if (Object.keys(cleanData).length > 0) {
+      await redis.set(key, JSON.stringify(cleanData));
+      console.log(`Stored client data for ${clientId}:`, cleanData);
+    }
+  } catch (error) {
+    console.error('Error storing client data:', error);
+    throw error;
+  }
+}
+
+async function getClientData(clientId: string): Promise<ClientAdditionalData | undefined> {
+  try {
+    const key = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${clientId}`;
+    const data = await redis.get(key);
+    
+    if (data) {
+      return JSON.parse(data);
+    }
+    return undefined;
+  } catch (error) {
+    console.error('Error getting client data:', error);
+    return undefined;
+  }
+}
+
 
   const deliverOfflineMessages = async () => {
     const offlineKey = `${apiKey}:${OFFLINE_MESSAGES_PREFIX}${clientId}`;
