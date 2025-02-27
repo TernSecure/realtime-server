@@ -42,12 +42,13 @@ export const handleChat = (
   socket.on('chat:private', async (data: { 
     targetId: string; 
     message: string;
+    fromData?: ClientAdditionalData;
   }) => {
     try {
-      const { targetId, message } = data;
+      const { targetId, message, fromData } = data;
 
-      const fromData = await getClientData(clientId);
-      const toData = await getClientData(targetId);
+      //const fromData = await getClientData(clientId);
+      //const toData = await getClientData(targetId);
 
 
       const roomId = await joinPrivateRoom(targetId);
@@ -59,9 +60,9 @@ export const handleChat = (
         roomId: safeRoomId,
         message,
         fromId: clientId,
-        toId: targetId,
+        //toId: targetId,
         timestamp: new Date().toISOString(),
-        //fromData,
+        fromData,
         //toData,
       };
 

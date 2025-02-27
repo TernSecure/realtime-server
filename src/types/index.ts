@@ -15,6 +15,7 @@ export interface SocketData {
   clientId: string;
   apiKey: string;
   socketId: string;
+  sessionId?: string;
 }
 
 export interface Presence {
@@ -69,7 +70,7 @@ export interface ChatMessage {
   roomId: string;
   message: string;
   fromId: string;
-  toId: string;
+  toId?: string;
   timestamp: string;
   fromData?: ClientAdditionalData;
   toData?: ClientAdditionalData;
