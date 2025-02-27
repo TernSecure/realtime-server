@@ -60,10 +60,8 @@ export const handleChat = (
         roomId: safeRoomId,
         message,
         fromId: clientId,
-        //toId: targetId,
         timestamp: new Date().toISOString(),
         metaData,
-        //toData,
       };
 
       const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
