@@ -5,7 +5,7 @@ export interface ClientInfo {
   apiKey: string;
 }
 
-export interface ClientAdditionalData {
+export interface ClientMetaData {
   name?: string;
   avatar?: string;
   email?: string;
@@ -72,8 +72,8 @@ export interface ChatMessage {
   fromId: string;
   toId?: string;
   timestamp: string;
-  fromData?: ClientAdditionalData;
-  toData?: ClientAdditionalData;
+  metaData?: ClientMetaData;
+  toData?: ClientMetaData;
 }
 
 
@@ -95,7 +95,7 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
   'chat:private': (data: { targetId: string; message: string }) => void;
   'chat:typing': (data: { targetId: string; isTyping: boolean }) => void;
-  'chat:profile_update': (data: ClientAdditionalData) => void;
+  'chat:profile_update': (data: ClientMetaData) => void;
   
   'presence:update': (status: string) => void;
 }

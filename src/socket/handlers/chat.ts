@@ -3,7 +3,7 @@ import { Redis } from 'ioredis';
 import type {
   ChatMessage,
   SocketData, 
-  ClientAdditionalData
+  ClientMetaData
 } from '../../types'
 
 import { 
@@ -42,10 +42,10 @@ export const handleChat = (
   socket.on('chat:private', async (data: { 
     targetId: string; 
     message: string;
-    fromData?: ClientAdditionalData;
+    metaData?: ClientMetaData;
   }) => {
     try {
-      const { targetId, message, fromData } = data;
+      const { targetId, message, metaData } = data;
 
       //const fromData = await getClientData(clientId);
       //const toData = await getClientData(targetId);
@@ -62,7 +62,7 @@ export const handleChat = (
         fromId: clientId,
         //toId: targetId,
         timestamp: new Date().toISOString(),
-        fromData,
+        metaData,
         //toData,
       };
 
@@ -96,7 +96,7 @@ export const handleChat = (
     }
   });
 
-  socket.on('chat:profile_update', async (data: ClientAdditionalData) => {
+  socket.on('chat:profile_update', async (data: ClientMetaData) => {
     try {
       console.log('Received profile update:', data, 'for client:', clientId);
 
@@ -122,7 +122,7 @@ export const handleChat = (
     }
   });
 
-async function storeClientData(clientId: string, data: ClientAdditionalData) {
+async function storeClientData(clientId: string, data: ClientMetaData) {
   try {
     const key = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${clientId}`;
     
@@ -136,7 +136,7 @@ async function storeClientData(clientId: string, data: ClientAdditionalData) {
   }
 }
 
-async function getClientData(clientId: string): Promise<ClientAdditionalData | undefined> {
+async function getClientData(clientId: string): Promise<ClientMetaData | undefined> {
   try {
     const key = `${apiKey}:${CLIENT_ADDITIONAL_DATA_PREFIX}${clientId}`;
     const data = await redis.get(key);
