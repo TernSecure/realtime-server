@@ -61,8 +61,8 @@ export const handleChat = (
         fromId: clientId,
         toId: targetId,
         timestamp: new Date().toISOString(),
-        fromData,
-        toData,
+        //fromData,
+        //toData,
       };
 
       const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
