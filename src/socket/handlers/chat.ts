@@ -110,15 +110,15 @@ export const handleChat = (
   });
 
   // Handle typing indicator within same API key
-  socket.on('chat:typing', async ({ targetId, isTyping }: { targetId: string; isTyping: boolean }) => {
-    const roomId = await joinPrivateRoom(targetId);
-    if (roomId) {
-      socket.to(roomId).emit('chat:typing', {
-        fromId: clientId, 
-        isTyping 
-      });
-    }
-  });
+ // socket.on('chat:typing', async ({ targetId, isTyping }: { targetId: string; isTyping: boolean }) => {
+ //   const roomId = await joinPrivateRoom(targetId);
+ //   if (roomId) {
+ //     socket.to(roomId).emit('chat:typing', {
+ //       fromId: clientId, 
+ //       isTyping 
+  //    });
+ //   }
+ // });
 
 async function storeClientData(clientId: string, data: ClientMetaData) {
   try {
