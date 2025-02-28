@@ -46,7 +46,8 @@ export const handleConnection = (
 
   // Join API key room
   socket.join(`key:${apiKey}`);
-  socket.join(`client:${clientId}`);
+  //socket.join(`client:${clientId}`);
+  socket.join(socket.data.clientId)
 
   return {
     cleanup: async () => {
