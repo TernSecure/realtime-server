@@ -15,7 +15,7 @@ export interface SocketData {
   clientId: string;
   apiKey: string;
   socketId: string;
-  sessionId?: string;
+  sessionId: string;
 }
 
 export interface Presence {
@@ -89,6 +89,8 @@ export interface ServerToClientEvents {
   'chat:delivered': (data: { messageId: string }) => void;
   'chat:profile_updated': () => void;
   'chat:typing': (data: { fromId: string; isTyping: boolean }) => void;
+  
+  'session': (data: { sessionId: string }) => void;
 }
 
 //events client sends to server
@@ -112,6 +114,25 @@ export type TypedSocket = Socket<
   SocketData
 >;
 
+export interface Session {
+  sessionId: string;
+  clientId: string;
+  connected: boolean;
+  lastActive: number;
+  userAgent?: string;
+  ip?: string;
+  socketIds: string[];
+}
+
+export interface SessionStore {
+  findSession(sessionId: string): Promise<Session | null>;
+  findSessionByClientId(clientId: string): Promise<Session | null>;
+  saveSession(session: Session): Promise<void>;
+  createSession(session: Session): Promise<Session>;
+  updateConnectionStatus(sessionId: string, socketId: string, connected: boolean): Promise<void>;
+  removeSocket(sessionId: string, socketId: string): Promise<boolean>;
+}
+
 
 export const SOCKET_MAP_PREFIX = 'socket:map:';
 export const CLIENT_SOCKETS_PREFIX = 'client:sockets:';
@@ -119,3 +140,5 @@ export const API_KEY_CLIENTS_PREFIX = 'apikey:clients:';
 export const OFFLINE_MESSAGES_PREFIX = 'offline:messages:';
 export const CHAT_ROOMS_PREFIX = 'chat:rooms:';
 export const CLIENT_ADDITIONAL_DATA_PREFIX = 'client:data:';
+export const SESSION_PREFIX = 'socket:session:';
+export const CLIENT_SESSION_PREFIX = 'socket:client:';

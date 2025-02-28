@@ -12,7 +12,13 @@ export const handleConnection = (
   socket: Socket<any, any, any, SocketData>,
   redis: Redis
 ) => {
-  const { clientId, apiKey, socketId } = socket.data;
+  const { clientId, apiKey, socketId, sessionId } = socket.data;
+
+  socket.emit("session", {
+    sessionId: sessionId
+  });
+
+  console.log(`Sent session ID ${sessionId} to client ${clientId}`);
 
   // Store socket mapping in Redis
   const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socketId}`;
@@ -25,7 +31,8 @@ export const handleConnection = (
     redis.hset(socketMapKey, {
       clientId,
       apiKey,
-      socketId
+      socketId,
+      sessionId
     }),
     
     // Add socket to client's socket list
@@ -39,6 +46,7 @@ export const handleConnection = (
 
   // Join API key room
   socket.join(`key:${apiKey}`);
+  socket.join(`client:${clientId}`);
 
   return {
     cleanup: async () => {
@@ -74,6 +82,7 @@ export const handleConnection = (
           isLastSocket,
           leaveRoom: () => {
             socket.leave(`key:${apiKey}`);
+            socket.leave(`client:${clientId}`);
           }
         };
       } catch (err) {
@@ -82,6 +91,7 @@ export const handleConnection = (
           isLastSocket: false,
           leaveRoom: () => {
             socket.leave(`key:${apiKey}`);
+            socket.leave(`client:${clientId}`);
           }
         };
       }

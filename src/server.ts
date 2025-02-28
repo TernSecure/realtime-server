@@ -4,6 +4,7 @@ import express = require('express');
 import { instrument } from '@socket.io/admin-ui';
 import { Redis } from 'ioredis';
 import { createAdapter } from "@socket.io/redis-adapter";
+import { createSessionStore } from './socket/';
 import { 
   socketMiddleware,
   handlePresence,
@@ -48,6 +49,11 @@ const serverConfig: ServerConfig = {
   },
 };
 
+const sessionStore = createSessionStore({
+  type: 'redis',
+  redis: redis
+});
+
 
 const io = new Server<
   ClientToServerEvents,
@@ -64,7 +70,7 @@ instrument(io, {
 //const HEARTBEAT_INTERVAL = 30000;
 //const PRESENCE_TIMEOUT = 60000;
 
-io.use(socketMiddleware);
+io.use(socketMiddleware(sessionStore));
 
 
 io.on("connection", (socket: Socket<TypedSocket>) => {
