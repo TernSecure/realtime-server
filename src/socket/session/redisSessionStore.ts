@@ -1,5 +1,4 @@
 import { Redis } from 'ioredis';
-import { v4 as uuidv4 } from 'uuid';
 import type { Session, SessionStore } from '../../types';
 import { SESSION_PREFIX, CLIENT_SESSION_PREFIX } from '../../types';
 
@@ -13,12 +12,30 @@ export class RedisSessionStore implements SessionStore {
     this.redis = redis;
   }
 
-  async findSession(sessionId: string): Promise<Session | null> {
-    const sessionData = await this.redis.get(`${SESSION_PREFIX}${sessionId}`);
-    if (sessionData) {
-      return JSON.parse(sessionData) as Session;
+  async findSession(sessionId: string): Promise<Session | null> { //coorect method to get hset
+    const sessionKey = `${SESSION_PREFIX}${sessionId}`;
+    
+    // Use hgetall to retrieve the hash data
+    const sessionData = await this.redis.hgetall(sessionKey);
+    
+    // If empty object is returned, the key doesn't exist
+    if (Object.keys(sessionData).length === 0) {
+      return null;
     }
-    return null;
+    
+    // Get the socket IDs for this session
+    const socketIds = await this.redis.smembers(`${sessionKey}:sockets`);
+    
+    // Convert the hash data to a Session object
+    return {
+      sessionId,
+      clientId: sessionData.clientId,
+      connected: sessionData.connected === 'true',
+      lastActive: parseInt(sessionData.lastActive || '0', 10),
+      userAgent: sessionData.userAgent || undefined,
+      ip: sessionData.ip || undefined,
+      socketIds: socketIds
+    };
   }
 
   async findSessionByClientId(clientId: string): Promise<Session | null> {
@@ -37,12 +54,12 @@ export class RedisSessionStore implements SessionStore {
   async saveSession(session: Session): Promise<void> {
     const sessionKey = `${SESSION_PREFIX}${session.sessionId}`;
     const clientKey = `${CLIENT_SESSION_PREFIX}${session.clientId}`;
+    const socketSetKey = `${sessionKey}:sockets`;
     
     // Use multi to execute commands atomically
-    await this.redis
-      .multi()
+    const multi = this.redis.multi();
       // Store session data as a hash
-      .hset(
+      multi.hset(
         sessionKey,
         'clientId', session.clientId,
         'connected', String(session.connected),
@@ -51,12 +68,21 @@ export class RedisSessionStore implements SessionStore {
         'ip', session.ip || '',
       )
       // Set expiration on the session hash
-      .expire(sessionKey, SESSION_TTL)
+      multi.expire(sessionKey, SESSION_TTL)
       // Map client ID to session ID
-      .set(clientKey, session.sessionId)
+      multi.set(clientKey, session.sessionId)
       // Set the same expiration on the client mapping
-      .expire(clientKey, SESSION_TTL)
-      .exec();
+      multi.expire(clientKey, SESSION_TTL)
+
+      // store socket IDs in a separate set
+
+      if ( session.socketIds && session.socketIds.length > 0) {
+        multi.del(socketSetKey);
+        multi.sadd(socketSetKey, ...session.socketIds);
+        multi.expire(socketSetKey, SESSION_TTL);
+
+      }
+      await multi.exec();
   }
 
 
@@ -67,15 +93,20 @@ export class RedisSessionStore implements SessionStore {
   ): Promise<void> {
     const session = await this.findSession(sessionId);
     if (session) {
+      const socketSetKey = `${SESSION_PREFIX}${sessionId}:sockets`;
+      
       if (connected) {
-        if (!session.socketIds.includes(socketId)) {
-          session.socketIds.push(socketId);
-        }
+        await this.redis.sadd(socketSetKey, socketId);
+
+        session.socketIds = [...session.socketIds, socketId];
+        session.connected = true;
       } else {
+        await this.redis.srem(socketSetKey, socketId);
+
         session.socketIds = session.socketIds.filter(id => id !== socketId);
+        session.connected = session.socketIds.length > 0;
       }
       
-      session.connected = session.socketIds.length > 0;
       session.lastActive = Date.now();
       
       await this.saveSession(session);
@@ -83,18 +114,25 @@ export class RedisSessionStore implements SessionStore {
   }
 
   async removeSocket(sessionId: string, socketId: string): Promise<boolean> {
+    const socketSetKey = `${SESSION_PREFIX}${sessionId}:sockets`;
+    
+    // Remove socket ID from the set
+    await this.redis.srem(socketSetKey, socketId);
+    
+    // Get remaining sockets
+    const remainingSockets = await this.redis.smembers(socketSetKey);
+    
+    // Update session data
     const session = await this.findSession(sessionId);
     if (session) {
-      session.socketIds = session.socketIds.filter(id => id !== socketId);
-      session.connected = session.socketIds.length > 0;
+      session.socketIds = remainingSockets;
+      session.connected = remainingSockets.length > 0;
       session.lastActive = Date.now();
       
       await this.saveSession(session);
-      return session.socketIds.length === 0;
+      return remainingSockets.length === 0;
     }
+    
     return true;
   }
-
-  // This method is now a no-op since Redis TTL handles expiration automatically
-
 } 

@@ -47,7 +47,8 @@ export const handleConnection = (
   // Join API key room
   socket.join(`key:${apiKey}`);
   //socket.join(`client:${clientId}`);
-  socket.join(socket.data.clientId)
+  //socket.join(socket.data.clientId)
+  socket.join(clientId);  
 
   return {
     cleanup: async () => {
@@ -83,7 +84,7 @@ export const handleConnection = (
           isLastSocket,
           leaveRoom: () => {
             socket.leave(`key:${apiKey}`);
-            socket.leave(`client:${clientId}`);
+            socket.leave(clientId);
           }
         };
       } catch (err) {
@@ -92,7 +93,7 @@ export const handleConnection = (
           isLastSocket: false,
           leaveRoom: () => {
             socket.leave(`key:${apiKey}`);
-            socket.leave(`client:${clientId}`);
+            socket.leave(clientId);
           }
         };
       }

@@ -33,6 +33,7 @@ export const socketMiddleware = (
 
         if(session && session.clientId === clientId) {
 
+        console.log(`Valid session found for client ${maskSensitive(clientId)}`);
         await sessionStore.updateConnectionStatus(sessionId, socket.id, true);
         
         socket.data = {
@@ -80,6 +81,7 @@ export const socketMiddleware = (
       next();
     } catch (error) {
       console.error('Session handling error:', error);
+      console.error(error);
       next(new Error('Authentication failed: Session error'));
     }
 };
