@@ -89,6 +89,7 @@ export interface ServerToClientEvents {
   'chat:delivered': (data: { messageId: string }) => void;
   'chat:profile_updated': () => void;
   'chat:typing': (data: { fromId: string; isTyping: boolean }) => void;
+  'chat:confirm_receipt': (data: { messageId: string }, callback: (response: { received: boolean }) => void) => void;
   
   'session': (data: { sessionId: string }) => void;
 }
@@ -98,6 +99,7 @@ export interface ClientToServerEvents {
   'chat:private': (data: { targetId: string; message: string }) => void;
   'chat:typing': (data: { targetId: string; isTyping: boolean }) => void;
   'chat:profile_update': (data: ClientMetaData) => void;
+  'chat:confirm_receipt': (data: { messageId: string }) => { received: boolean };
   
   'presence:update': (status: string) => void;
 }
