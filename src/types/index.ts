@@ -144,3 +144,6 @@ export const CHAT_ROOMS_PREFIX = 'chat:rooms:';
 export const CLIENT_ADDITIONAL_DATA_PREFIX = 'client:data:';
 export const SESSION_PREFIX = 'socket:session:';
 export const CLIENT_SESSION_PREFIX = 'socket:client:';
+export const MESSAGES_PREFIX = 'messages:';
+export const MESSAGE_ID_PREFIX = 'message:id:';
+export const ROOM_MESSAGES_PREFIX = 'room:messages:';

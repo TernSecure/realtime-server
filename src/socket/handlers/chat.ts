@@ -13,6 +13,8 @@ import {
   OFFLINE_MESSAGES_PREFIX,
   CLIENT_ADDITIONAL_DATA_PREFIX
 } from '../../types';
+import { RedisMessageStore } from '../store';
+
 
 
 export const handleChat = (
@@ -21,21 +23,23 @@ export const handleChat = (
   redis: Redis
 ) => {
   const { clientId, apiKey, socketId } = socket.data
+  const messageStore = new RedisMessageStore(redis);
     
 
-  const joinPrivateRoom = async (targetClientId: string): Promise<string | null > => {
+  const joinPrivateRoom = async (targetId: string): Promise<string | null > => {
 
-    const roomId = [clientId, targetClientId].sort().join('_');
-    const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${roomId}`;
+    const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${[clientId, targetId].sort().join('_')}`;
+    const roomExists = await redis.exists(roomKey);
 
-    await redis.sadd(roomKey, clientId, targetClientId);
+    if (roomExists) {
+      const roomId = await redis.get(roomKey);
+      if (roomId) {
+        socket.join(roomId);
+        return roomId;
+      }
+    }
 
-    const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
-    await redis.sadd(apiKeyClientsKey, targetClientId);
-
-    socket.join(roomId);
-
-    return roomId;
+    return null;
   };
 
   // Handle private message
@@ -63,6 +67,8 @@ export const handleChat = (
         timestamp: new Date().toISOString(),
         metaData,
       };
+
+      await messageStore.saveMessage(apiKey, messageData);
 
       // Acknowledge message receipt to sender immediately
       if (callback) {
