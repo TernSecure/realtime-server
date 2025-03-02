@@ -1,7 +1,6 @@
 import { Redis } from 'ioredis';
 import { InMemorySessionStore } from './session/inMemorySessionStore';
 import { RedisSessionStore } from './session/redisSessionStore';
-import { RedisMessageStore } from './messages/redisMessageStore';
 import type { SessionStore } from '../types';
 
 export function createSessionStore(config: { 
@@ -21,4 +20,3 @@ export function createSessionStore(config: {
 // Re-export the session store types for convenience
 export { InMemorySessionStore } from './session/inMemorySessionStore';
 export { RedisSessionStore } from './session/redisSessionStore';
-export { RedisMessageStore} from './messages/redisMessageStore';

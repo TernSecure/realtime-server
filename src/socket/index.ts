@@ -4,4 +4,5 @@ export * from './handlers/chat'
 export { SocketState } from './state';
 export { socketMiddleware } from './middleware'
 export { logNetworkAddresses, getNetworkAddresses} from './network'
-export * from './store'
+export * from './sessionStore'
+export { RedisMessageStore } from './messages/redisMessageStore'

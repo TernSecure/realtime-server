@@ -13,7 +13,7 @@ import {
   OFFLINE_MESSAGES_PREFIX,
   CLIENT_ADDITIONAL_DATA_PREFIX
 } from '../../types';
-import { RedisMessageStore } from '../store';
+import { RedisMessageStore } from '../messages/redisMessageStore';
 
 
 
@@ -26,20 +26,23 @@ export const handleChat = (
   const messageStore = new RedisMessageStore(redis);
     
 
-  const joinPrivateRoom = async (targetId: string): Promise<string | null > => {
-
-    const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${[clientId, targetId].sort().join('_')}`;
-    const roomExists = await redis.exists(roomKey);
-
-    if (roomExists) {
-      const roomId = await redis.get(roomKey);
-      if (roomId) {
-        socket.join(roomId);
-        return roomId;
-      }
+  const joinPrivateRoom = async (targetId: string): Promise<string> => {
+    // Create a consistent room ID based on the two user IDs
+    const participants = [clientId, targetId].sort();
+    const roomId = `${participants[0]}_${participants[1]}`;
+    const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${roomId}`;
+    
+    if (socket.rooms.has(roomId)) {
+      console.log(`Socket ${socketId} already in room ${roomId}`);
+      return roomId;
     }
-
-    return null;
+    
+    await redis.sadd(roomKey, clientId, targetId);
+    
+    socket.join(roomId);
+    console.log(`Joined socket ${socketId} to room ${roomId}`);
+    
+    return roomId;
   };
 
   // Handle private message
@@ -89,7 +92,10 @@ export const handleChat = (
         for (const recipientSocketId of recipientSockets) {
           const recipientSocket = io.sockets.sockets.get(recipientSocketId);
           if (recipientSocket) {
-            recipientSocket.join(safeRoomId);
+            if (!recipientSocket.rooms.has(roomId)) {
+              recipientSocket.join(roomId)
+            }
+            //recipientSocket.join(safeRoomId);
             console.log(`Joined recipient socket ${recipientSocketId} to room ${roomId}`);
 
             recipientSocket.emit('chat:message', messageData);
