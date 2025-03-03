@@ -86,10 +86,11 @@ export interface ServerToClientEvents {
   
   'chat:message': (message: ChatMessage) => void;
   'chat:error': (error: { message: string }) => void;
-  'chat:delivered': (data: { messageId: string }) => void;
+  //'chat:delivered': (data: { messageId: string }) => void;
   'chat:profile_updated': () => void;
   'chat:typing': (data: { fromId: string; isTyping: boolean }) => void;
-  'chat:confirm_receipt': (data: { messageId: string }, callback: (response: { received: boolean }) => void) => void;
+  'chat:status': (data: { messageId: string; status: string }) => void
+  //'chat:confirm_receipt': (data: { messageId: string }, callback: (response: { received: boolean }) => void) => void;
   
   'session': (data: { sessionId: string }) => void;
 }
@@ -99,7 +100,10 @@ export interface ClientToServerEvents {
   'chat:private': (data: { targetId: string; message: string }) => void;
   'chat:typing': (data: { targetId: string; isTyping: boolean }) => void;
   'chat:profile_update': (data: ClientMetaData) => void;
-  'chat:confirm_receipt': (data: { messageId: string }) => { received: boolean };
+  //'chat:confirm_receipt': (data: { messageId: string }) => { received: boolean };
+  'chat:status': (data: { messageId: string; status: string }, callback?: (response: { received: boolean }) => void) => void; // New unified status event
+  'chat:subscribe_status': () => void;
+  'chat:unsubscribe_status': () => void; 
   
   'presence:update': (status: string) => void;
 }

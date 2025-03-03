@@ -24,6 +24,28 @@ export const handleChat = (
 ) => {
   const { clientId, apiKey, socketId } = socket.data
   const messageStore = new RedisMessageStore(redis);
+
+  const statusSubscribers = new Set<string>();
+
+  socket.on('chat:subscribe_status', () => {
+    statusSubscribers.add(socketId);
+    console.log(`Socket ${socketId} subscribed to status updates`);
+  });
+  
+  socket.on('chat:unsubscribe_status', () => {
+    statusSubscribers.delete(socketId);
+    console.log(`Socket ${socketId} unsubscribed from status updates`);
+  });
+
+  const sendStatusUpdate = (targetSocketId: string, messageId: string, status: string) => {
+    // Only send if the socket is subscribed to status updates
+    if (statusSubscribers.has(targetSocketId)) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        targetSocket.emit('chat:status', { messageId, status });
+      }
+    }
+  };
     
 
   const joinPrivateRoom = async (targetId: string): Promise<string> => {
@@ -110,11 +132,15 @@ export const handleChat = (
           const recipientSocket = io.sockets.sockets.get(recipientSocketId);
           if (recipientSocket) {
             try {
-              await io.timeout(5000).to(recipientSocketId).emitWithAck('chat:confirm_receipt', {
-                messageId: messageData.messageId
+              const response = await io.timeout(5000).to(recipientSocketId).emitWithAck('chat:status', {
+                messageId: messageData.messageId,
+                status: 'received'
               });
 
-              socket.emit('chat:delivered', { messageId: messageData.messageId });
+              if (response && response.received) {
+                sendStatusUpdate(socketId, messageData.messageId, 'delivered');
+                break;
+              }
               break;
             } catch (error) {
               continue;
@@ -138,6 +164,26 @@ export const handleChat = (
           error: 'Failed to send message'
         });
       }
+    }
+  });
+
+  socket.on('chat:status', (
+    data: { messageId: string, status: string },
+    callback?: (response: { received: boolean }) => void
+  ) => {
+    try {
+      // If this is a receipt confirmation request, acknowledge it
+      if (data.status === 'received' && callback) {
+        callback({ received: true });
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error handling message status:', error);
+      if (callback) {
+        callback({ received: false });
+      }
+      return { success: false };
     }
   });
 
@@ -252,6 +298,7 @@ async function getClientData(clientId: string): Promise<ClientMetaData | undefin
 
   return {
     cleanup: async () => {
+      statusSubscribers.delete(socketId);
       // Leave all rooms
       const rooms = Array.from(socket.rooms);
       for (const room of rooms) {
