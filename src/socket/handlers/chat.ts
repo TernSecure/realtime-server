@@ -141,7 +141,7 @@ export const handleChat = (
                 sendStatusUpdate(socketId, messageData.messageId, 'delivered');
                 break;
               }
-              break;
+              //break;
             } catch (error) {
               continue;
             }
