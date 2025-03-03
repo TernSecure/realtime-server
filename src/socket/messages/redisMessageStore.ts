@@ -16,33 +16,55 @@ export class RedisMessageStore {
     this.redis = redis;
   }
 
-  /**
-   * Save a message to Redis
-   * @param apiKey The API key for namespacing
-   * @param message The message to save
-   * @param ttl Optional TTL in seconds (defaults to 24 hours)
-   */
-  async saveMessage(apiKey: string, message: ChatMessage, ttl: number = MESSAGE_TTL): Promise<void> {
-    const messageKey = `${apiKey}:${MESSAGE_ID_PREFIX}${message.messageId}`;
-    const roomKey = `${apiKey}:${ROOM_MESSAGES_PREFIX}${message.roomId}`;
+/**
+ * Save a message to Redis with optimizations for high message volume
+ * @param apiKey The API key for namespacing
+ * @param message The message to save
+ * @param ttl Optional TTL in seconds (defaults to 24 hours)
+ */
+async saveMessage(apiKey: string, message: ChatMessage, ttl: number = MESSAGE_TTL): Promise<void> {
+    // Use pipeline to reduce network round-trips
+    const pipeline = this.redis.pipeline();
     
-    // Store the message by ID
-    await this.redis.set(
-      messageKey,
-      JSON.stringify(message),
-      'EX',
-      ttl
+    // Store message in a hash by room with message ID as field
+    // This reduces the number of Redis keys and improves memory efficiency
+    const roomMessagesKey = `${apiKey}:room:messages:data:${message.roomId}`;
+    pipeline.hset(
+      roomMessagesKey,
+      message.messageId,
+      JSON.stringify(message)
     );
+    pipeline.expire(roomMessagesKey, ttl);
     
     // Add message ID to the room's sorted set with timestamp as score
+    // This maintains chronological ordering for efficient retrieval
+    const roomIndexKey = `${apiKey}:room:messages:index:${message.roomId}`;
     const timestamp = new Date(message.timestamp).getTime();
-    await this.redis.zadd(roomKey, timestamp, message.messageId);
+    pipeline.zadd(roomIndexKey, timestamp, message.messageId);
+    pipeline.expire(roomIndexKey, ttl);
     
-    // Set expiration on the room key
-    await this.redis.expire(roomKey, ttl);
+    // Update room metadata (message count, last activity)
+    const roomMetaKey = `${apiKey}:room:meta:${message.roomId}`;
+    pipeline.hincrby(roomMetaKey, 'messageCount', 1);
+    pipeline.hset(roomMetaKey, 'lastActivity', timestamp.toString());
+    pipeline.expire(roomMetaKey, ttl);
     
-    // Trim to last 100 messages if needed
-    await this.redis.zremrangebyrank(roomKey, 0, -101);
+    // Update user's active conversations list
+    // This helps build the chat history UI efficiently
+    if (message.fromId) {
+      const senderConversationsKey = `${apiKey}:user:conversations:${message.fromId}`;
+      pipeline.zadd(senderConversationsKey, timestamp, message.roomId);
+      pipeline.expire(senderConversationsKey, ttl);
+    }
+    
+    if (message.toId) {
+      const recipientConversationsKey = `${apiKey}:user:conversations:${message.toId}`;
+      pipeline.zadd(recipientConversationsKey, timestamp, message.roomId);
+      pipeline.expire(recipientConversationsKey, ttl);
+    }
+    
+    // Execute all commands in a single round-trip
+    await pipeline.exec();
   }
 
   /**
