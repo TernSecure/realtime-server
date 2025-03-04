@@ -16,13 +16,14 @@ export class RedisMessageStore {
     this.redis = redis;
   }
 
-/**
+  /**
  * Save a message to Redis with optimizations for high message volume
  * @param apiKey The API key for namespacing
  * @param message The message to save
  * @param ttl Optional TTL in seconds (defaults to 24 hours)
  */
-async saveMessage(apiKey: string, message: ChatMessage, ttl: number = MESSAGE_TTL): Promise<void> {
+
+  async saveMessage(apiKey: string, message: ChatMessage, ttl: number = MESSAGE_TTL): Promise<void> {
     // Use pipeline to reduce network round-trips
     const pipeline = this.redis.pipeline();
     
@@ -67,50 +68,6 @@ async saveMessage(apiKey: string, message: ChatMessage, ttl: number = MESSAGE_TT
     await pipeline.exec();
   }
 
-  /**
-   * Get a message by ID
-   * @param apiKey The API key for namespacing
-   * @param messageId The message ID
-   * @returns The message or null if not found
-   */
-  async getMessageById(apiKey: string, messageId: string): Promise<ChatMessage | null> {
-    const messageKey = `${apiKey}:${MESSAGE_ID_PREFIX}${messageId}`;
-    const messageJson = await this.redis.get(messageKey);
-    
-    if (!messageJson) {
-      return null;
-    }
-    
-    return JSON.parse(messageJson) as ChatMessage;
-  }
-
-  /**
-   * Get recent messages for a room
-   * @param apiKey The API key for namespacing
-   * @param roomId The room ID
-   * @param limit Maximum number of messages to return (default 100)
-   * @returns Array of messages
-   */
-  async getRecentRoomMessages(apiKey: string, roomId: string, limit: number = 100): Promise<ChatMessage[]> {
-    const roomKey = `${apiKey}:${ROOM_MESSAGES_PREFIX}${roomId}`;
-    
-    // Get the most recent message IDs (highest scores first)
-    const messageIds = await this.redis.zrevrange(roomKey, 0, limit - 1);
-    
-    if (!messageIds.length) {
-      return [];
-    }
-    
-    // Get all messages in parallel
-    const messagePromises = messageIds.map(id => 
-      this.getMessageById(apiKey, id)
-    );
-    
-    const messages = await Promise.all(messagePromises);
-    
-    // Filter out any null messages (in case they expired)
-    return messages.filter(msg => msg !== null) as ChatMessage[];
-  }
 
   /**
    * Delete a message
@@ -133,97 +90,171 @@ async saveMessage(apiKey: string, message: ChatMessage, ttl: number = MESSAGE_TT
     await this.redis.del(deliveryKey);
   }
 
-  /**
-   * Mark a message as delivered
-   * @param apiKey The API key for namespacing
-   * @param messageId The message ID
-   */
-  async markMessageAsDelivered(apiKey: string, messageId: string): Promise<void> {
-    const deliveryKey = `${apiKey}:${DELIVERY_STATUS_PREFIX}${messageId}`;
-    
-    // Store delivery status with timestamp
-    await this.redis.hmset(deliveryKey, {
-      delivered: 'true',
-      deliveredAt: new Date().toISOString()
-    });
-    
-    // Set expiration on delivery status (same as message TTL)
-    await this.redis.expire(deliveryKey, MESSAGE_TTL);
-  }
 
   /**
-   * Check if a message has been delivered
+   * Get messages for a room with pagination support
    * @param apiKey The API key for namespacing
-   * @param messageId The message ID
-   * @returns Whether the message has been delivered
+   * @param roomId The room ID
+   * @param options Pagination options
+   * @returns Array of messages
    */
-  async isMessageDelivered(apiKey: string, messageId: string): Promise<boolean> {
-    const deliveryKey = `${apiKey}:${DELIVERY_STATUS_PREFIX}${messageId}`;
-    const delivered = await this.redis.hget(deliveryKey, 'delivered');
-    return delivered === 'true';
-  }
-
-  /**
-   * Get all undelivered messages for a user
-   * @param apiKey The API key for namespacing
-   * @param userId The user ID
-   * @returns Array of undelivered messages
-   */
-  async getUndeliveredMessages(apiKey: string, userId: string): Promise<ChatMessage[]> {
-    // We'll need to scan through rooms where this user is a participant
-    const userRoomPattern = `${apiKey}:${ROOM_MESSAGES_PREFIX}*${userId}*`;
+  async getMessages(
+    apiKey: string, 
+    roomId: string, 
+    options: { 
+      limit?: number; 
+      before?: string; // message ID to start before
+      after?: string;  // message ID to start after
+    } = {}
+  ): Promise<ChatMessage[]> {
+    const { limit = 50, before = null, after = null } = options;
     
-    // Get all matching room keys
-    const roomKeys = await this.scanKeys(userRoomPattern);
+    // Get the index of messages in this room
+    const roomIndexKey = `${apiKey}:room:messages:index:${roomId}`;
     
-    const allMessages: ChatMessage[] = [];
+    let messageIds: string[] = [];
+    let startScore = '-inf';
+    let endScore = '+inf';
     
-    // For each room, get messages and check delivery status
-    for (const roomKey of roomKeys) {
-      // Extract roomId from the key
-      const roomId = roomKey.split(`${apiKey}:${ROOM_MESSAGES_PREFIX}`)[1];
-      
-      // Get recent messages for this room
-      const roomMessages = await this.getRecentRoomMessages(apiKey, roomId);
-      
-      // Check each message for delivery status
-      for (const message of roomMessages) {
-        if (message.toId === userId) {
-          const isDelivered = await this.isMessageDelivered(apiKey, message.messageId);
-          if (!isDelivered) {
-            allMessages.push(message);
-          }
-        }
+    // If we're paginating before a message, get its timestamp
+    if (before) {
+      const beforeMsg = await this.getMessageById(apiKey, roomId, before);
+      if (beforeMsg) {
+        endScore = '(' + new Date(beforeMsg.timestamp).getTime().toString();
       }
     }
     
-    return allMessages;
+    // If we're paginating after a message, get its timestamp
+    if (after) {
+      const afterMsg = await this.getMessageById(apiKey, roomId, after);
+      if (afterMsg) {
+        startScore = '(' + new Date(afterMsg.timestamp).getTime().toString();
+      }
+    }
+    
+    // Get message IDs in the specified range
+    if (after) {
+      // When paginating forward, we want newer messages (higher scores)
+      messageIds = await this.redis.zrangebyscore(
+        roomIndexKey, 
+        startScore, 
+        endScore, 
+        'LIMIT', 
+        0, 
+        limit
+      );
+    } else {
+      // When paginating backward or initial load, we want older messages (lower scores)
+      messageIds = await this.redis.zrevrangebyscore(
+        roomIndexKey, 
+        endScore, 
+        startScore, 
+        'LIMIT', 
+        0, 
+        limit
+      );
+    }
+    
+    if (!messageIds.length) {
+      return [];
+    }
+    
+    // Get all messages in a single operation
+    const roomMessagesKey = `${apiKey}:room:messages:data:${roomId}`;
+    const messageData = await this.redis.hmget(
+      roomMessagesKey,
+      ...messageIds
+    );
+    
+    // Parse messages and filter out any null values
+    const messages = messageData
+      .map((data, index) => {
+        if (!data) return null;
+        try {
+          return JSON.parse(data) as ChatMessage;
+        } catch (e) {
+          console.error(`Error parsing message ${messageIds[index]}:`, e);
+          return null;
+        }
+      })
+      .filter(msg => msg !== null) as ChatMessage[];
+    
+    // Sort by timestamp (oldest first by default)
+    return messages.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
   }
 
   /**
-   * Helper method to scan Redis for keys matching a pattern
-   * @param pattern The key pattern to match
-   * @returns Array of matching keys
+   * Get a specific message by ID
+   * @param apiKey The API key for namespacing
+   * @param roomId The room ID
+   * @param messageId The message ID
+   * @returns The message or null if not found
    */
-  private async scanKeys(pattern: string): Promise<string[]> {
-    let cursor = '0';
-    const keys: string[] = [];
+  async getMessageById(apiKey: string, roomId: string, messageId: string): Promise<ChatMessage | null> {
+    const roomMessagesKey = `${apiKey}:room:messages:data:${roomId}`;
+    const messageJson = await this.redis.hget(roomMessagesKey, messageId);
     
-    do {
-      // Scan for keys matching the pattern
-      const [nextCursor, matchedKeys] = await this.redis.scan(
-        cursor,
-        'MATCH',
-        pattern,
-        'COUNT',
-        100
-      );
-      
-      cursor = nextCursor;
-      keys.push(...matchedKeys);
-      
-    } while (cursor !== '0');
+    if (!messageJson) {
+      return null;
+    }
     
-    return keys;
+    try {
+      return JSON.parse(messageJson) as ChatMessage;
+    } catch (e) {
+      console.error(`Error parsing message ${messageId}:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * Get recent conversations for a user
+   * @param apiKey The API key for namespacing
+   * @param userId The user ID
+   * @param limit Maximum number of conversations to return
+   * @returns Array of conversation data with last message
+   */
+  async getRecentConversations(
+    apiKey: string, 
+    userId: string, 
+    limit: number = 20
+  ): Promise<Array<{
+    roomId: string;
+    lastMessage: ChatMessage;
+    unreadCount: number;
+    lastActivity: number;
+  }>> {
+    // Get user's conversations sorted by last activity
+    const userConversationsKey = `${apiKey}:user:conversations:${userId}`;
+    const roomIds = await this.redis.zrevrange(userConversationsKey, 0, limit - 1);
+    
+    if (!roomIds.length) {
+      return [];
+    }
+    
+    // Get data for each conversation in parallel
+    const conversationPromises = roomIds.map(async (roomId) => {
+      // Get room metadata
+      const roomMetaKey = `${apiKey}:room:meta:${roomId}`;
+      const meta = await this.redis.hgetall(roomMetaKey);
+      
+      // Get the last message for this room
+      const lastMessage = await this.getMessages(apiKey, roomId, { limit: 1 });
+      
+      return {
+        roomId,
+        lastMessage: lastMessage[0] || null,
+        unreadCount: parseInt(meta.unreadCount || '0'),
+        lastActivity: parseInt(meta.lastActivity || '0')
+      };
+    });
+    
+    const conversations = await Promise.all(conversationPromises);
+    
+    // Filter out conversations with no messages and sort by last activity
+    return conversations
+      .filter(conv => conv.lastMessage !== null)
+      .sort((a, b) => b.lastActivity - a.lastActivity);
   }
 }

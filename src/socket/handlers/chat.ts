@@ -205,6 +205,77 @@ export const handleChat = (
     }
   });
 
+  socket.on('chat:conversations', async(
+    options: { limit?: number; offset?: number; },
+    callback?: (response: {
+      success: boolean;
+      users?: any[];
+      hasMore?: boolean;
+      error?: string;
+    }) => void
+  ) => {
+    try {
+      const { limit =  50, offset = 0 } = options;
+
+      const conversations = await messageStore.getRecentConversations(
+        apiKey,
+        clientId,
+        limit
+      );
+
+      if (!conversations.length) {
+        if(callback) {
+          callback({
+            success: true,
+            users: [],
+            hasMore: false
+          });
+        }
+        return;
+      }
+
+    const userIds = conversations.map(conv => {
+
+      const lastMsg = conv.lastMessage;
+      if (!lastMsg) return null;
+
+      return lastMsg.fromId === clientId ? lastMsg.toId : lastMsg.fromId;
+    }).filter(id => id !== null && id !== undefined) as string[];
+
+    const userDataPromises = userIds.map(async (userId) => {
+      const userData = await getClientData(userId as string);
+
+      return {
+        id: userId,
+        name: userData?.name || userId.substring(0, 8),
+        email: userData?.email || '',
+        avatar: userData?.avatar || ''
+      };
+    });
+
+    const users = await Promise.all(userDataPromises);
+
+    const paginatedUsers = users.slice(offset, offset + limit);
+    const hasMore = users.length > offset + limit;
+
+    if (callback) {
+      callback({
+        success: true,
+        users: paginatedUsers,
+        hasMore
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    if (callback) {
+      callback({ 
+        success: false, 
+        error: 'Failed to fetch conversations'
+      });
+    }
+  }
+});
+
   socket.on('chat:profile_update', async (data: ClientMetaData) => {
     try {
       console.log('Received profile update:', data, 'for client:', clientId);
