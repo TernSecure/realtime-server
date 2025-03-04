@@ -217,18 +217,25 @@ export const handleChat = (
     try {
       const { limit =  50, offset = 0 } = options;
 
+      console.log(`Fetching conversations for client ${clientId} with apiKey ${apiKey}`);
+
+      const userConversationsKey = `${apiKey}:user:conversations:${clientId}`;
+      console.log(`Looking for conversations with key: ${userConversationsKey}`);
+
       const conversations = await messageStore.getRecentConversations(
         apiKey,
         clientId,
         limit
       );
 
+      console.log(`Found ${conversations.length} conversations for user ${clientId}`);
+
       if (!conversations.length) {
         if(callback) {
           callback({
             success: true,
             users: [],
-            hasMore: false
+            hasMore: false,
           });
         }
         return;

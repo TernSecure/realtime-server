@@ -103,7 +103,7 @@ export interface ClientToServerEvents {
   //'chat:confirm_receipt': (data: { messageId: string }) => { received: boolean };
   'chat:status': (data: { messageId: string; status: string }, callback?: (response: { received: boolean }) => void) => void; // New unified status event
   'chat:subscribe_status': () => void;
-  'chat:unsubscribe_status': () => void; 
+  'chat:unsubscribe_status': () => void;
   
   'presence:update': (status: string) => void;
 }
