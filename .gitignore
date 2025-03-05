@@ -3,6 +3,9 @@ dist
 server.js
 *.js.map
 
+.env*
+.env*.local
+
 # Client code
 client
 

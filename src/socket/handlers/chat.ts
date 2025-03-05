@@ -106,24 +106,13 @@ export const handleChat = (
       const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
       const recipientSockets = await redis.smembers(recipientSocketsKey);
 
-      socket.emit('chat:message', messageData); //Always send the message to the sender
+      //socket.emit('chat:message', messageData); //Always send the message to the sender
+
+      sendStatusUpdate(socketId, messageData.messageId, 'sent');
 
 
-      if(recipientSockets.length > 0) {
-        // Join all recipient sockets to the room
-        for (const recipientSocketId of recipientSockets) {
-          const recipientSocket = io.sockets.sockets.get(recipientSocketId);
-          if (recipientSocket) {
-            if (!recipientSocket.rooms.has(roomId)) {
-              recipientSocket.join(roomId)
-            }
-            //recipientSocket.join(safeRoomId);
-            console.log(`Joined recipient socket ${recipientSocketId} to room ${roomId}`);
 
-            recipientSocket.emit('chat:message', messageData);
-          }
-        }
-        
+
         // Now broadcast to the room (both sender and recipient will receive)
         //io.to(safeRoomId).emit('chat:message', messageData);
         //socket.emit('chat:delivered', { messageId: messageData.messageId });
@@ -132,9 +121,11 @@ export const handleChat = (
           const recipientSocket = io.sockets.sockets.get(recipientSocketId);
           if (recipientSocket) {
             try {
+              recipientSocket.emit('chat:message', messageData);
+
               const response = await io.timeout(5000).to(recipientSocketId).emitWithAck('chat:status', {
                 messageId: messageData.messageId,
-                status: 'received'
+                status: 'confirm_delivery'
               });
 
               if (response && response.received) {
@@ -147,14 +138,6 @@ export const handleChat = (
             }
           }
         }
-      } else {
-        // Handle offline message as before
-        const offlineKey = `${apiKey}:${OFFLINE_MESSAGES_PREFIX}${targetId}`;
-        await redis.lpush(offlineKey, JSON.stringify(messageData));
-
-        //socket.emit('chat:message', messageData);
-        //socket.emit('chat:delivered', { messageId: messageData.messageId });
-      }
     } catch (error) {
       console.error('Error handling private message:', error);
       socket.emit('chat:error', { message: 'Failed to send message' });
@@ -173,8 +156,16 @@ export const handleChat = (
   ) => {
     try {
       // If this is a receipt confirmation request, acknowledge it
-      if (data.status === 'received' && callback) {
+      if (data.status === 'confirm_delivery' && callback) {
         callback({ received: true });
+
+        //const originalSender = findOriginalSender(data.messageId);
+       // if (originalSender) {
+       //   sendStatusUpdate(originalSender, data.messageId, 'delivered');
+       // }
+
+        sendStatusUpdate(socketId, data.messageId, 'delivered');
+
       }
       
       return { success: true };

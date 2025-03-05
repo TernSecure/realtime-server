@@ -104,6 +104,8 @@ export interface ClientToServerEvents {
   'chat:status': (data: { messageId: string; status: string }, callback?: (response: { received: boolean }) => void) => void; // New unified status event
   'chat:subscribe_status': () => void;
   'chat:unsubscribe_status': () => void;
+  'chat:messages': (options: { roomId: string; limit?: number; before?: string; after?: string }, callback?: (response: { success: boolean; messages?: ChatMessage[]; error?: string }) => void) => void;
+  'chat:conversations': (options: { limit?: number; offset?: number }, callback?: (response: { success: boolean; conversations?: any[]; hasMore?: boolean; error?: string }) => void) => void;
   
   'presence:update': (status: string) => void;
 }

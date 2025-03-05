@@ -19,6 +19,8 @@ import type {
   TypedSocket,
 } from './types'
 
+
+
 interface ServerConfig {
   adapter: ReturnType<typeof createAdapter>;
   transports: ('websocket' | 'polling')[];
@@ -30,14 +32,14 @@ interface ServerConfig {
 
 const app = express();
 const httpServer = createServer(app);
-const redis = new Redis();
-const redisSub = redis.duplicate();
+const redisPub = new Redis();
+const redisSub = redisPub.duplicate();
 //const state = new SocketState();
 
 app.use(express.json());
 
 const serverConfig: ServerConfig = {
-  adapter: createAdapter(redis, redisSub),
+  adapter: createAdapter(redisPub, redisSub),
   transports: ['websocket', 'polling'],
   cors: {
     origin: [
@@ -51,7 +53,7 @@ const serverConfig: ServerConfig = {
 
 const sessionStore = createSessionStore({
   type: 'redis',
-  redis: redis
+  redis: redisPub
 });
 
 
@@ -76,9 +78,9 @@ io.use(socketMiddleware(sessionStore));
 io.on("connection", (socket: Socket<TypedSocket>) => {
   console.log("Client connected:", socket.id);
 
-  const connectionHandler = handleConnection(io, socket, redis);
-  const presenceHandler = handlePresence(io, socket, redis);
-  const chatHandler = handleChat(io, socket, redis);
+  const connectionHandler = handleConnection(io, socket, redisPub);
+  const presenceHandler = handlePresence(io, socket, redisPub);
+  const chatHandler = handleChat(io, socket, redisPub);
 
   
   presenceHandler.enterPresence();
@@ -98,7 +100,7 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 });
 
 
-const PORT = 3000;
+const PORT = 3001;
 httpServer.listen(PORT, () => {
   logNetworkAddresses(PORT);
 });
@@ -107,7 +109,7 @@ process.on('SIGTERM', () => {
   //clearInterval(cleanupInterval);
   console.log('SIGTERM received. Closing server...');
   httpServer.close(() => {
-    redis.quit();
+    redisPub.quit();
     redisSub.quit();
     console.log('Server closed');
     process.exit(0);
