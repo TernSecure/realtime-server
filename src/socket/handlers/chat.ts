@@ -209,7 +209,7 @@ export const handleChat = (
     options: { limit?: number; offset?: number; },
     callback?: (response: {
       success: boolean;
-      users?: any[];
+      conversations?: any[];
       hasMore?: boolean;
       error?: string;
     }) => void
@@ -218,9 +218,6 @@ export const handleChat = (
       const { limit =  50, offset = 0 } = options;
 
       console.log(`Fetching conversations for client ${clientId} with apiKey ${apiKey}`);
-
-      const userConversationsKey = `${apiKey}:user:conversations:${clientId}`;
-      console.log(`Looking for conversations with key: ${userConversationsKey}`);
 
       const conversations = await messageStore.getRecentConversations(
         apiKey,
@@ -234,41 +231,36 @@ export const handleChat = (
         if(callback) {
           callback({
             success: true,
-            users: [],
+            conversations: [],
             hasMore: false,
           });
         }
         return;
       }
 
-    const userIds = conversations.map(conv => {
-
+    const conversationsWithUsers = conversations.map(conv => {
       const lastMsg = conv.lastMessage;
       if (!lastMsg) return null;
 
-      return lastMsg.fromId === clientId ? lastMsg.toId : lastMsg.fromId;
-    }).filter(id => id !== null && id !== undefined) as string[];
-
-    const userDataPromises = userIds.map(async (userId) => {
-      const userData = await getClientData(userId as string);
+      const otherUserId = lastMsg.fromId === clientId ? lastMsg.toId : lastMsg.fromId;
 
       return {
-        id: userId,
-        name: userData?.name || userId.substring(0, 8),
-        email: userData?.email || '',
-        avatar: userData?.avatar || ''
+        roomId: conv.roomId,
+        otherUserId: otherUserId,
+        lastMessage: lastMsg,
+        unreadCount: conv.unreadCount,
+        lastActivity: conv.lastActivity
       };
-    });
+    }).filter(Boolean);
 
-    const users = await Promise.all(userDataPromises);
 
-    const paginatedUsers = users.slice(offset, offset + limit);
-    const hasMore = users.length > offset + limit;
+    const paginatedConversations = conversationsWithUsers.slice(offset, offset + limit);
+    const hasMore = conversationsWithUsers.length > offset + limit;
 
     if (callback) {
       callback({
         success: true,
-        users: paginatedUsers,
+        conversations: paginatedConversations,
         hasMore
       });
     }
