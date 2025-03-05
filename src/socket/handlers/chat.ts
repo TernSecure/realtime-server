@@ -258,7 +258,61 @@ export const handleChat = (
       });
     }
   }
+  });
+
+  socket.on('chat:messages', async (
+    options: { 
+      roomId: string; 
+      limit?: number;
+      before?: string;
+      after?: string;
+    },
+    callback?: (response: {
+      success: boolean;
+      messages?: ChatMessage[];
+      error?: string;
+    }) => void
+  ) => {
+    try {
+      const { roomId, limit = 50, before = null, after = null } = options;
+
+      if (!roomId.includes(clientId)) {
+        if(callback) {
+          callback({
+            success: false,
+            error: 'Unauthorized access to room'
+          });
+        }
+        return;
+      }
+
+    const messages = await messageStore.getMessages(
+      apiKey,
+      roomId,
+      {
+        limit,
+        before: before || undefined,
+        after: after || undefined
+      }
+    );
+
+    if (callback) {
+      callback({
+        success: true,
+        messages
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    if (callback) {
+      callback({
+        success: false,
+        error: 'Failed to fetch messages'
+      });
+    }
+  }
 });
+
 
   socket.on('chat:profile_update', async (data: ClientMetaData) => {
     try {
