@@ -155,6 +155,7 @@ export const handleChat = (
     callback?: (response: { received: boolean }) => void
   ) => {
     try {
+      console.log(`Received status update from ${clientId}: messageId=${data.messageId}, status=${data.status}`);
       // If this is a receipt confirmation request, acknowledge it
       if (data.status === 'confirm_delivery' && callback) {
         callback({ received: true });
