@@ -238,29 +238,9 @@ export const handleChat = (
         return;
       }
 
-    const conversationsWithUsers = conversations.map(conv => {
-      let otherUserId = null;
 
-      if (conv.roomId && conv.roomId.includes('_')) {
-        const [user1, user2] = conv.roomId.split('_');
-        otherUserId = user1 === clientId ? user2 : user1;
-      }
-
-      if (!otherUserId && conv.lastMessage) {
-        otherUserId = conv.lastMessage.fromId === clientId 
-          ? conv.lastMessage.toId 
-          : conv.lastMessage.fromId;
-      }
-
-      return {
-        ...conv,
-        otherUserId
-      };
-    });
-
-
-    const paginatedConversations = conversationsWithUsers.slice(offset, offset + limit);
-    const hasMore = conversationsWithUsers.length > offset + limit;
+    const paginatedConversations = conversations.slice(offset, offset + limit);
+    const hasMore = conversations.length > offset + limit;
 
     if (callback) {
       callback({

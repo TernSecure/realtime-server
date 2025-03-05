@@ -224,37 +224,64 @@ export class RedisMessageStore {
     lastMessage: ChatMessage;
     unreadCount: number;
     lastActivity: number;
+    otherUserId: string;
   }>> {
-    // Get user's conversations sorted by last activity
-    const userConversationsKey = `${apiKey}:user:conversations:${userId}`;
-    const roomIds = await this.redis.zrevrange(userConversationsKey, 0, limit - 1);
+    // Get room meta keys that contain this user's ID
+    const roomMetaPattern = `${apiKey}:room:meta:*${userId}*`;
+    const roomMetaKeys = await this.redis.keys(roomMetaPattern);
     
-    if (!roomIds.length) {
+    if (!roomMetaKeys.length) {
       return [];
     }
     
-    // Get data for each conversation in parallel
-    const conversationPromises = roomIds.map(async (roomId) => {
+    // Get activity timestamps for sorting
+    const roomData = await Promise.all(roomMetaKeys.map(async (metaKey) => {
+      const roomId = metaKey.replace(`${apiKey}:room:meta:`, '');
+      const meta = await this.redis.hgetall(metaKey);
+      return {
+        roomId,
+        lastActivity: parseInt(meta.lastActivity || '0')
+      };
+    }));
+    
+    // Sort by activity and limit
+    const sortedRoomIds = roomData
+      .sort((a, b) => b.lastActivity - a.lastActivity)
+      .slice(0, limit)
+      .map(room => room.roomId);
+    
+    if (!sortedRoomIds.length) {
+      return [];
+    }
+    
+    // Get conversation data in parallel
+    const conversations = await Promise.all(sortedRoomIds.map(async (roomId) => {
+      // Extract other user ID from room ID
+      const [user1, user2] = roomId.split('_');
+      const otherUserId = user1 === userId ? user2 : user1;
+      
       // Get room metadata
       const roomMetaKey = `${apiKey}:room:meta:${roomId}`;
       const meta = await this.redis.hgetall(roomMetaKey);
       
-      // Get the last message for this room
+      // Get last message
       const lastMessage = await this.getMessages(apiKey, roomId, { limit: 1 });
       
       return {
         roomId,
         lastMessage: lastMessage[0] || null,
         unreadCount: parseInt(meta.unreadCount || '0'),
-        lastActivity: parseInt(meta.lastActivity || '0')
+        lastActivity: parseInt(meta.lastActivity || '0'),
+        otherUserId
       };
-    });
+    }));
     
-    const conversations = await Promise.all(conversationPromises);
-    
-    // Filter out conversations with no messages and sort by last activity
+    // Filter out conversations with no messages
     return conversations
       .filter(conv => conv.lastMessage !== null)
-      .sort((a, b) => b.lastActivity - a.lastActivity);
+      .map(conv => ({
+        ...conv,
+        otherUserId: conv.otherUserId as string
+      }));
   }
 }
