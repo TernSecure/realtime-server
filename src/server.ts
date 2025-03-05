@@ -28,6 +28,9 @@ interface ServerConfig {
     origin: string[];
     credentials: boolean;
   };
+  connectionStateRecovery: {
+    maxDisconnectionDuration: number;
+  };
 }
 
 const app = express();
@@ -49,6 +52,9 @@ const serverConfig: ServerConfig = {
     ],
     credentials: true
   },
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+  }
 };
 
 const sessionStore = createSessionStore({
@@ -77,6 +83,9 @@ io.use(socketMiddleware(sessionStore));
 
 io.on("connection", (socket: Socket<TypedSocket>) => {
   console.log("Client connected:", socket.id);
+  if(socket.recovered) {
+
+  }
 
   const connectionHandler = handleConnection(io, socket, redisPub);
   const presenceHandler = handlePresence(io, socket, redisPub);

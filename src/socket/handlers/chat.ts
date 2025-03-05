@@ -37,13 +37,16 @@ export const handleChat = (
     console.log(`Socket ${socketId} unsubscribed from status updates`);
   });
 
-  const sendStatusUpdate = (targetSocketId: string, messageId: string, status: string) => {
-    // Only send if the socket is subscribed to status updates
+  const sendStatusUpdate = (targetSocketId: string, messageId: string, status: string) => {    
     if (statusSubscribers.has(targetSocketId)) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
         targetSocket.emit('chat:status', { messageId, status });
+      } else {
+        console.log(`[SendStatus] Target socket not found`);
       }
+    } else {
+      console.log(`[SendStatus] Target not subscribed to status updates`);
     }
   };
     
@@ -99,45 +102,39 @@ export const handleChat = (
       if (callback) {
         callback({ 
           success: true, 
-          messageId: messageData.messageId 
+          messageId: messageData.messageId,
         });
       }
 
       const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
       const recipientSockets = await redis.smembers(recipientSocketsKey);
 
-      //socket.emit('chat:message', messageData); //Always send the message to the sender
+      socket.emit('chat:message', messageData); //Always send the message to the sender
 
       sendStatusUpdate(socketId, messageData.messageId, 'sent');
 
-
-
-
-        // Now broadcast to the room (both sender and recipient will receive)
-        //io.to(safeRoomId).emit('chat:message', messageData);
-        //socket.emit('chat:delivered', { messageId: messageData.messageId });
-
+      if (recipientSockets.length > 0) {
         for (const recipientSocketId of recipientSockets) {
           const recipientSocket = io.sockets.sockets.get(recipientSocketId);
           if (recipientSocket) {
-            try {
-              recipientSocket.emit('chat:message', messageData);
+            recipientSocket.emit('chat:message', messageData);
 
-              const response = await io.timeout(5000).to(recipientSocketId).emitWithAck('chat:status', {
+            try {
+              const response = await io.timeout(2000).to(recipientSocketId).emitWithAck('chat:status', {
                 messageId: messageData.messageId,
-                status: 'confirm_delivery'
+                status: 'confirm_delivery',
               });
 
-              if (response && response.received) {
-                sendStatusUpdate(socketId, messageData.messageId, 'delivered');
-                break;
-              }
-              //break;
+              sendStatusUpdate(socketId, messageData.messageId, 'delivered');
+              break;
             } catch (error) {
+              console.log('Delivery confirmation error:', error);
               continue;
             }
           }
         }
+      }
+      //sendStatusUpdate(socketId, messageData.messageId, 'delivered');
     } catch (error) {
       console.error('Error handling private message:', error);
       socket.emit('chat:error', { message: 'Failed to send message' });
@@ -158,18 +155,9 @@ export const handleChat = (
       console.log(`Received status update from ${clientId}: messageId=${data.messageId}, status=${data.status}`);
       // If this is a receipt confirmation request, acknowledge it
       if (data.status === 'confirm_delivery' && callback) {
+        console.log('Confirming delivery for:', data.messageId);
         callback({ received: true });
-
-        //const originalSender = findOriginalSender(data.messageId);
-       // if (originalSender) {
-       //   sendStatusUpdate(originalSender, data.messageId, 'delivered');
-       // }
-
-        sendStatusUpdate(socketId, data.messageId, 'delivered');
-
       }
-      
-      return { success: true };
     } catch (error) {
       console.error('Error handling message status:', error);
       if (callback) {
