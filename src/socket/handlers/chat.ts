@@ -239,19 +239,24 @@ export const handleChat = (
       }
 
     const conversationsWithUsers = conversations.map(conv => {
-      const lastMsg = conv.lastMessage;
-      if (!lastMsg) return null;
+      let otherUserId = null;
 
-      const otherUserId = lastMsg.fromId === clientId ? lastMsg.toId : lastMsg.fromId;
+      if (conv.roomId && conv.roomId.includes('_')) {
+        const [user1, user2] = conv.roomId.split('_');
+        otherUserId = user1 === clientId ? user2 : user1;
+      }
+
+      if (!otherUserId && conv.lastMessage) {
+        otherUserId = conv.lastMessage.fromId === clientId 
+          ? conv.lastMessage.toId 
+          : conv.lastMessage.fromId;
+      }
 
       return {
-        roomId: conv.roomId,
-        otherUserId: otherUserId,
-        lastMessage: lastMsg,
-        unreadCount: conv.unreadCount,
-        lastActivity: conv.lastActivity
+        ...conv,
+        otherUserId
       };
-    }).filter(Boolean);
+    });
 
 
     const paginatedConversations = conversationsWithUsers.slice(offset, offset + limit);
