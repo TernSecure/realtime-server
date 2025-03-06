@@ -26,6 +26,7 @@ export const socketMiddleware = (
     try {
       const userAgent = socket.handshake.headers['user-agent'];
       const ip = socket.handshake.address;
+      //const ipAddress = socket.handshake.headers["x-forwarded-for"].split(",")[0];
 
 
       if(sessionId) {

@@ -25,7 +25,7 @@ export const handleChat = (
   const { clientId, apiKey, socketId } = socket.data
   const messageStore = new RedisMessageStore(redis);
 
-  const STATUS_SUBSCRIBERS_KEY = `${apiKey}:status_subscribers`;
+  const STATUS_SUBSCRIBERS_KEY = `${apiKey}:message_status:status_subscribers`;
   const SUBSCRIPTION_TTL = 24 * 60 * 60; // 24 hours
 
 

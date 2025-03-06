@@ -6,6 +6,9 @@ import {
   SOCKET_MAP_PREFIX,
   API_KEY_CLIENTS_PREFIX
 } from '../../types'
+import { getServerPublicKey, setClientPublicKey } from '../../middleware';
+
+
 
 export const handleConnection = (
   io: Server,
@@ -15,10 +18,19 @@ export const handleConnection = (
   const { clientId, apiKey, socketId, sessionId } = socket.data;
 
   socket.emit("session", {
-    sessionId: sessionId
+    sessionId: sessionId,
+    serverPublicKey: getServerPublicKey()
   });
 
   console.log(`Sent session ID ${sessionId} to client ${clientId}`);
+
+  socket.on('client:publicKey', (publicKey: string) => {
+    setClientPublicKey(clientId, publicKey);
+    console.log(`Received public key from client ${clientId}`);
+    
+    // Notify client that encryption is ready
+    socket.emit('encryption:ready');
+  });
 
   // Store socket mapping in Redis
   const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socketId}`;
