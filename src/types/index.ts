@@ -93,22 +93,27 @@ export interface ServerToClientEvents {
   'chat:status': (data: { messageId: string; status: string }) => void
   //'chat:confirm_receipt': (data: { messageId: string }, callback: (response: { received: boolean }) => void) => void;
   
-  'session': (data: { sessionId: string }) => void;
+  'session': (data: { sessionId: string; serverPublicKey: string }) => void;
+  'encryption:ready': () => void;
+  'encrypted': (data: { event: string; data: string }) => void;
 }
 
-//events client sends to server
 export interface ClientToServerEvents {
+  // Existing events
   'chat:private': (data: { targetId: string; message: string }) => void;
   'chat:typing': (data: { targetId: string; isTyping: boolean }) => void;
   'chat:profile_update': (data: ClientMetaData) => void;
-  //'chat:confirm_receipt': (data: { messageId: string }) => { received: boolean };
-  'chat:status': (data: { messageId: string; status: string }, callback?: (response: { received: boolean }) => void) => void; // New unified status event
+  'chat:status': (data: { messageId: string; status: string }, callback?: (response: { received: boolean }) => void) => void;
   'chat:subscribe_status': () => void;
   'chat:unsubscribe_status': () => void;
   'chat:messages': (options: { roomId: string; limit?: number; before?: string; after?: string }, callback?: (response: { success: boolean; messages?: ChatMessage[]; error?: string }) => void) => void;
   'chat:conversations': (options: { limit?: number; offset?: number }, callback?: (response: { success: boolean; conversations?: any[]; hasMore?: boolean; error?: string }) => void) => void;
   
   'presence:update': (status: string) => void;
+  
+  // Add encryption-related events
+  'client:publicKey': (publicKey: string) => void;
+  'encrypted': (data: { event: string; data: string }) => void;
 }
 
 export interface InterServerEvents {
