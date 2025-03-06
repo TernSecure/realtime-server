@@ -83,9 +83,7 @@ io.use(socketMiddleware(sessionStore));
 
 io.on("connection", (socket: Socket<TypedSocket>) => {
   console.log("Client connected:", socket.id);
-  if(socket.recovered) {
-
-  }
+  if(socket.recovered) {}
 
   const connectionHandler = handleConnection(io, socket, redisPub);
   const presenceHandler = handlePresence(io, socket, redisPub);

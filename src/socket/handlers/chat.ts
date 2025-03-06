@@ -25,20 +25,24 @@ export const handleChat = (
   const { clientId, apiKey, socketId } = socket.data
   const messageStore = new RedisMessageStore(redis);
 
-  const statusSubscribers = new Set<string>();
+  const STATUS_SUBSCRIBERS_KEY = `${apiKey}:status_subscribers`;
+  const SUBSCRIPTION_TTL = 24 * 60 * 60; // 24 hours
 
-  socket.on('chat:subscribe_status', () => {
-    statusSubscribers.add(socketId);
+
+  socket.on('chat:subscribe_status', async () => {
+    await redis.sadd(STATUS_SUBSCRIBERS_KEY, socketId);
+    await redis.expire(STATUS_SUBSCRIBERS_KEY, SUBSCRIPTION_TTL);
     console.log(`Socket ${socketId} subscribed to status updates`);
   });
   
-  socket.on('chat:unsubscribe_status', () => {
-    statusSubscribers.delete(socketId);
+  socket.on('chat:unsubscribe_status', async () => {
+    await redis.srem(STATUS_SUBSCRIBERS_KEY, socketId);
     console.log(`Socket ${socketId} unsubscribed from status updates`);
   });
 
-  const sendStatusUpdate = (targetSocketId: string, messageId: string, status: string) => {    
-    if (statusSubscribers.has(targetSocketId)) {
+  const sendStatusUpdate = async (targetSocketId: string, messageId: string, status: string) => {
+    const isSubscribed = await redis.sismember(STATUS_SUBSCRIBERS_KEY, targetSocketId);    
+    if (isSubscribed) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
         targetSocket.emit('chat:status', { messageId, status });
@@ -75,9 +79,10 @@ export const handleChat = (
     targetId: string; 
     message: string;
     metaData?: ClientMetaData;
+    toData?: ClientMetaData;
   }, callback?: (response: { success: boolean; messageId?: string; error?: string }) => void) => {
     try {
-      const { targetId, message, metaData } = data;
+      const { targetId, message, metaData, toData } = data;
 
       //const fromData = await getClientData(clientId);
       //const toData = await getClientData(targetId);
@@ -94,6 +99,7 @@ export const handleChat = (
         fromId: clientId,
         timestamp: new Date().toISOString(),
         metaData,
+        toData
       };
 
       await messageStore.saveMessage(apiKey, messageData);
@@ -387,7 +393,8 @@ async function getClientData(clientId: string): Promise<ClientMetaData | undefin
 
   return {
     cleanup: async () => {
-      statusSubscribers.delete(socketId);
+      //statusSubscribers.delete(socketId);
+      await redis.srem(STATUS_SUBSCRIBERS_KEY, socketId);
       // Leave all rooms
       const rooms = Array.from(socket.rooms);
       for (const room of rooms) {

@@ -6,6 +6,7 @@ export interface ClientInfo {
 }
 
 export interface ClientMetaData {
+  uid: string
   name?: string;
   avatar?: string;
   email?: string;
