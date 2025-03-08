@@ -7,6 +7,10 @@ const serverKeyPair = box.keyPair();
 // Store client public keys
 const clientPublicKeys = new Map<string, Uint8Array>();
 
+export const generateKeyPair = () => {
+  return encodeBase64(serverKeyPair.publicKey);
+};
+
 export const getServerPublicKey = (): string => {
   return encodeBase64(serverKeyPair.publicKey);
 };

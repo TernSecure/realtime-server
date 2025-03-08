@@ -6,9 +6,96 @@ import {
   SOCKET_MAP_PREFIX,
   API_KEY_CLIENTS_PREFIX
 } from '../../types'
-import { getServerPublicKey, setClientPublicKey } from '../../middleware';
+import { 
+  getServerPublicKey, setClientPublicKey, encryptForClient, decryptFromClient, hasClientPublicKey, 
+  encryptAndPackMessage,
+  decryptAndUnpackMessage
+  } from '../../middleware';
+
+//const UNENCRYPTED_EVENTS = ['session', 'client:publicKey', 'encryption:ready'];
+const UNENCRYPTED_EVENTS: string[] = [];
+
+function packMessageAsBinary(event: string, data: any): ArrayBuffer {
+  try {
+    // Convert the event and data to a JSON string
+    const jsonString = JSON.stringify({ event, data });
+    
+    // Convert the JSON string to a Uint8Array
+    const encoder = new TextEncoder();
+    const binaryData = encoder.encode(jsonString);
+    
+    return binaryData.buffer;
+  } catch (error) {
+    console.error('Error packing message as binary:', error);
+    return new ArrayBuffer(0);
+  }
+}
 
 
+function setupBinaryTransmission(socket: Socket) {
+  const clientId = socket.data?.clientId;
+  const sessionId = socket.data?.sessionId;
+  if (!clientId || !sessionId) return;
+  
+  // Store the original emit method
+  const originalEmit = socket.emit;
+  
+  // Override emit to encrypt data and send as binary
+  socket.emit = function(event: string, ...args: any[]): boolean {
+    const payload = args[0];
+    // Skip encryption for certain events
+
+    if (hasClientPublicKey(clientId) && !UNENCRYPTED_EVENTS.includes(event)) {
+      try {
+        // Encrypt and send as binary
+        const encryptedBinaryData = encryptAndPackMessage(clientId, event, payload);
+        if (encryptedBinaryData) {
+          console.log(`Sending encrypted binary message for event: ${event}`);
+          return originalEmit.apply(this, ['binary', encryptedBinaryData, true]); // true flag indicates encrypted
+        }
+      } catch (error) {
+        console.error(`Error encrypting message for event ${event}:`, error);
+      }
+    }
+
+    try {
+      const binaryData = packMessageAsBinary(event, payload);
+      if (binaryData.byteLength > 0) {
+        console.log(`Sending unencrypted binary message for event: ${event}`);
+        return originalEmit.apply(this, ['binary', binaryData, false]); // false flag indicates unencrypted
+      }
+    } catch (error) {
+      console.error(`Error packing message as binary for event ${event}:`, error);
+    }
+    
+    // Fallback to regular Socket.IO
+    console.warn(`Falling back to regular transmission for event: ${event}`);
+    return originalEmit.apply(this, [event, ...args]);
+  };
+
+  socket.on('binary', (data: ArrayBuffer, isEncrypted: boolean) => {
+    try {
+      if (isEncrypted) {
+        // Handle encrypted binary data
+        const message = decryptAndUnpackMessage(clientId, data);
+        if (message) {
+          const { event, data: messageData } = message;
+          console.log(`Received encrypted binary message for event: ${event}`);
+          originalEmit.apply(socket, [event, messageData]);
+        }
+      } else {
+        // Handle unencrypted binary data
+        const decoder = new TextDecoder();
+        const jsonString = decoder.decode(new Uint8Array(data));
+        const { event, data: messageData } = JSON.parse(jsonString);
+        console.log(`Received unencrypted binary message for event: ${event}`);
+        originalEmit.apply(socket, [event, messageData]);
+      }
+    } catch (error) {
+      console.error('Error processing binary message:', error);
+    }
+  });
+}
 
 export const handleConnection = (
   io: Server,
@@ -17,12 +104,12 @@ export const handleConnection = (
 ) => {
   const { clientId, apiKey, socketId, sessionId } = socket.data;
 
+  setupBinaryTransmission(socket);
+
   socket.emit("session", {
     sessionId: sessionId,
     serverPublicKey: getServerPublicKey()
   });
-
-  console.log(`Sent session ID ${sessionId} to client ${clientId}`);
 
   socket.on('client:publicKey', (publicKey: string) => {
     setClientPublicKey(clientId, publicKey);
@@ -31,6 +118,8 @@ export const handleConnection = (
     // Notify client that encryption is ready
     socket.emit('encryption:ready');
   });
+
+  console.log(`Sent session ID ${sessionId} to client ${clientId}`);
 
   // Store socket mapping in Redis
   const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socketId}`;
@@ -61,6 +150,68 @@ export const handleConnection = (
   //socket.join(`client:${clientId}`);
   //socket.join(socket.data.clientId)
   socket.join(clientId);  
+
+  //setupEncryption(socket);
+  //setupBinaryEncryption(socket);
+  
+
+  function setupEncryption(socket: Socket) {
+    // Store the original emit method
+    const originalEmit = socket.emit;
+    
+    // Override emit to encrypt data
+    socket.emit = function(event: string, ...args: any[]) {
+      // Skip encryption for certain events
+      if (UNENCRYPTED_EVENTS.includes(event)) {
+        return originalEmit.apply(this, [event, ...args]);
+      }
+  
+      const clientId = socket.data?.clientId;
+      if (!clientId || !hasClientPublicKey(clientId)) {
+        return originalEmit.apply(this, [event, ...args]);
+      }
+  
+      // Encrypt the payload
+      const payload = args[0];
+      const encryptedPayload = encryptForClient(clientId, payload);
+      
+      if (encryptedPayload) {
+        console.log(`Sending encrypted event: ${event} to client`, clientId);
+        // Send encrypted data with event name
+        return originalEmit.apply(this, [
+          'encrypted', 
+          { 
+            event, 
+            data: encryptedPayload 
+          }
+        ]);
+      } else {
+        console.warn(`Encryption failed for event: ${event}, sending unencrypted`);
+        return originalEmit.apply(this, [event, ...args]);
+      }
+    };
+
+    socket.on('encrypted', (encryptedPacket) => {
+      const { event, data } = encryptedPacket;
+      const clientId = socket.data?.clientId;
+      
+      if (!clientId) {
+        console.error('Client ID not found for decryption');
+        return;
+      }
+      
+      const decryptedData = decryptFromClient(clientId, data);
+      if (decryptedData) {
+        console.log(`Received encrypted event: ${event} from client`, clientId);
+        // Process the decrypted event
+        socket.emit(event, decryptedData);
+      } else {
+        console.error(`Failed to decrypt message for event: ${event}`);
+      }
+    });
+  }
+
+
 
   return {
     cleanup: async () => {

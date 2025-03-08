@@ -17,7 +17,8 @@ import type {
   SocketData,
   TypedSocket,
 } from './types'
-import { socketMiddleware, createEncryptionMiddleware } from './middleware';
+import { socketMiddleware } from './middleware';
+import { setupAuthRoutes } from './routes';
 
 
 
@@ -43,6 +44,8 @@ const redisSub = redisPub.duplicate();
 //const state = new SocketState();
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/api', setupAuthRoutes(redisPub));
 
 const serverConfig: ServerConfig = {
   adapter: createAdapter(redisPub, redisSub),
@@ -83,7 +86,7 @@ instrument(io, {
 
 //const HEARTBEAT_INTERVAL = 30000;
 //const PRESENCE_TIMEOUT = 60000;
-createEncryptionMiddleware(io);
+
 
 io.use(socketMiddleware(sessionStore));
 

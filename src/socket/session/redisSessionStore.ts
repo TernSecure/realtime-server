@@ -1,9 +1,10 @@
 import { Redis } from 'ioredis';
 import type { Session, SessionStore } from '../../types';
-import { SESSION_PREFIX, CLIENT_SESSION_PREFIX } from '../../types';
+import {  CLIENT_SESSION_PREFIX } from '../../types';
 
 // Session TTL in seconds (24 hours)
 const SESSION_TTL = 24 * 60 * 60;
+const SESSION_PREFIX = 'tobedeleted:session:';
 
 export class RedisSessionStore implements SessionStore {
   private redis: Redis;
@@ -30,6 +31,7 @@ export class RedisSessionStore implements SessionStore {
     return {
       sessionId,
       clientId: sessionData.clientId,
+      apikey: sessionData.apikey,
       connected: sessionData.connected === 'true',
       lastActive: parseInt(sessionData.lastActive || '0', 10),
       userAgent: sessionData.userAgent || undefined,

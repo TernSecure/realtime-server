@@ -136,6 +136,8 @@ export interface Session {
   userAgent?: string;
   ip?: string;
   socketIds: string[];
+  apikey?: string;
+  serverPublicKey?: string;
 }
 
 export interface SessionStore {

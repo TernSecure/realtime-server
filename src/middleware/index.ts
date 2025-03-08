@@ -1,3 +1,4 @@
 export { socketMiddleware } from './middleware'
-export  { getServerPublicKey, encryptForClient, hasClientPublicKey, setClientPublicKey} from './encryption'
+export  { getServerPublicKey, generateKeyPair, encryptForClient, hasClientPublicKey, setClientPublicKey, decryptFromClient} from './encryption'
 export { createEncryptionMiddleware } from './encryptionMiddleware'
+export { decryptAndUnpackMessage, encryptAndPackMessage } from './binaryProtocol'
