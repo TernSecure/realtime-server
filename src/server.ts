@@ -18,7 +18,8 @@ import type {
   TypedSocket,
 } from './types'
 import { socketMiddleware } from './middleware';
-import { setupAuthRoutes } from './routes';
+//import { setupAuthRoutes } from './routes';
+import { setupAuthRoutes } from './api/auth';
 
 
 
@@ -51,7 +52,7 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-app.use('/api', setupAuthRoutes(redisPub));
+app.use('/api/auth', setupAuthRoutes(redisPub));
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

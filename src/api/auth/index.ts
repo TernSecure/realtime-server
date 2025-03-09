@@ -1,0 +1,1 @@
+export { setupAuthRoutes } from './routes'
