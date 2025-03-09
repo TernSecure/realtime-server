@@ -21,6 +21,7 @@ import { socketMiddleware } from './middleware';
 import { setupAuthRoutes } from './routes';
 
 
+
 interface ServerConfig {
   adapter: ReturnType<typeof createAdapter>;
   transports: ('websocket' | 'polling')[];
@@ -44,7 +45,23 @@ const redisSub = redisPub.duplicate();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use('/api', (req, res, next) => {
+  console.log(`API Request: ${req.method} ${req.url}`);
+  next();
+});
+
 app.use('/api', setupAuthRoutes(redisPub));
+
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+// Add 404 handler for unmatched routes
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
 
 const serverConfig: ServerConfig = {
   adapter: createAdapter(redisPub, redisSub),
