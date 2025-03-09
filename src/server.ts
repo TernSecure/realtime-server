@@ -21,7 +21,6 @@ import { socketMiddleware } from './middleware';
 import { setupAuthRoutes } from './routes';
 
 
-
 interface ServerConfig {
   adapter: ReturnType<typeof createAdapter>;
   transports: ('websocket' | 'polling')[];
@@ -52,9 +51,10 @@ const serverConfig: ServerConfig = {
   transports: ['websocket', 'polling'],
   cors: {
     origin: [
-      "http://localhost:3000", 
+      "http://localhost:3000",
       "http://10.162.0.6",
       "https://realtime-admin.ternsecure.com",
+      "https://auth-test-one-chi.vercel.app"
     ],
     credentials: true
   },
