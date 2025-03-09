@@ -12,6 +12,9 @@ import {
   decryptAndUnpackMessage
   } from '../../middleware';
 
+const SOCKET_MAP_TTL = 24 * 60 * 60;
+
+
 //const UNENCRYPTED_EVENTS = ['session', 'client:publicKey', 'encryption:ready'];
 const UNENCRYPTED_EVENTS: string[] = [];
 
@@ -106,18 +109,18 @@ export const handleConnection = (
 
   setupBinaryTransmission(socket);
 
-  socket.emit("session", {
-    sessionId: sessionId,
-    serverPublicKey: getServerPublicKey()
-  });
+  //socket.emit("session", {
+  //  sessionId: sessionId,
+  //  serverPublicKey: getServerPublicKey()
+  //});
 
-  socket.on('client:publicKey', (publicKey: string) => {
-    setClientPublicKey(clientId, publicKey);
-    console.log(`Received public key from client ${clientId}`);
+  //socket.on('client:publicKey', (publicKey: string) => {
+   // setClientPublicKey(clientId, publicKey);
+  //  console.log(`Received public key from client ${clientId}`);
     
     // Notify client that encryption is ready
-    socket.emit('encryption:ready');
-  });
+   // socket.emit('encryption:ready');
+  //});
 
   console.log(`Sent session ID ${sessionId} to client ${clientId}`);
 
@@ -125,6 +128,28 @@ export const handleConnection = (
   const socketMapKey = `${apiKey}:${SOCKET_MAP_PREFIX}${socketId}`;
   const clientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${clientId}`;
   const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
+
+{/*  redis.multi()
+  // Map socket to client info
+  .hset(socketMapKey, {
+    clientId,
+    apiKey,
+    socketId,
+    sessionId
+  })
+  .expire(socketMapKey, SOCKET_MAP_TTL)  // Add TTL to socket mapping
+  
+  // Add socket to client's socket list
+  .sadd(clientSocketsKey, socketId)
+  .expire(clientSocketsKey, SOCKET_MAP_TTL)  // Add TTL to client sockets
+  
+  // Add client to API key's client list
+  .sadd(apiKeyClientsKey, clientId)
+  .expire(apiKeyClientsKey, SOCKET_MAP_TTL)  // Add TTL to API key clients
+  .exec()
+  .catch(err => {
+    console.error('Redis connection state error:', err);
+  }); */}
 
   // Using Promise.all for parallel Redis operations
   Promise.all([
@@ -135,6 +160,7 @@ export const handleConnection = (
       socketId,
       sessionId
     }),
+    redis.expire(socketMapKey, SOCKET_MAP_TTL),
     
     // Add socket to client's socket list
     redis.sadd(clientSocketsKey, socketId),
@@ -150,66 +176,6 @@ export const handleConnection = (
   //socket.join(`client:${clientId}`);
   //socket.join(socket.data.clientId)
   socket.join(clientId);  
-
-  //setupEncryption(socket);
-  //setupBinaryEncryption(socket);
-  
-
-  function setupEncryption(socket: Socket) {
-    // Store the original emit method
-    const originalEmit = socket.emit;
-    
-    // Override emit to encrypt data
-    socket.emit = function(event: string, ...args: any[]) {
-      // Skip encryption for certain events
-      if (UNENCRYPTED_EVENTS.includes(event)) {
-        return originalEmit.apply(this, [event, ...args]);
-      }
-  
-      const clientId = socket.data?.clientId;
-      if (!clientId || !hasClientPublicKey(clientId)) {
-        return originalEmit.apply(this, [event, ...args]);
-      }
-  
-      // Encrypt the payload
-      const payload = args[0];
-      const encryptedPayload = encryptForClient(clientId, payload);
-      
-      if (encryptedPayload) {
-        console.log(`Sending encrypted event: ${event} to client`, clientId);
-        // Send encrypted data with event name
-        return originalEmit.apply(this, [
-          'encrypted', 
-          { 
-            event, 
-            data: encryptedPayload 
-          }
-        ]);
-      } else {
-        console.warn(`Encryption failed for event: ${event}, sending unencrypted`);
-        return originalEmit.apply(this, [event, ...args]);
-      }
-    };
-
-    socket.on('encrypted', (encryptedPacket) => {
-      const { event, data } = encryptedPacket;
-      const clientId = socket.data?.clientId;
-      
-      if (!clientId) {
-        console.error('Client ID not found for decryption');
-        return;
-      }
-      
-      const decryptedData = decryptFromClient(clientId, data);
-      if (decryptedData) {
-        console.log(`Received encrypted event: ${event} from client`, clientId);
-        // Process the decrypted event
-        socket.emit(event, decryptedData);
-      } else {
-        console.error(`Failed to decrypt message for event: ${event}`);
-      }
-    });
-  }
 
 
 

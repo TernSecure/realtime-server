@@ -131,13 +131,16 @@ export type TypedSocket = Socket<
 export interface Session {
   sessionId: string;
   clientId: string;
+  apiKey?: string;
+  serverPublicKey?: string;
+  clientPublicKey?: string;
+  encryptionReady? : boolean;
   connected: boolean;
+  createdAt?: number;
   lastActive: number;
   userAgent?: string;
   ip?: string;
   socketIds: string[];
-  apikey?: string;
-  serverPublicKey?: string;
 }
 
 export interface SessionStore {
@@ -145,6 +148,7 @@ export interface SessionStore {
   findSessionByClientId(clientId: string): Promise<Session | null>;
   saveSession(session: Session): Promise<void>;
   createSession(session: Session): Promise<Session>;
+  updateConnection(session: Session): Promise<void>;
   updateConnectionStatus(sessionId: string, socketId: string, connected: boolean): Promise<void>;
   removeSocket(sessionId: string, socketId: string): Promise<boolean>;
 }

@@ -44,6 +44,11 @@ const redisPub = new Redis();
 const redisSub = redisPub.duplicate();
 //const state = new SocketState();
 
+const sessionStore = createSessionStore({
+  type: 'redis',
+  redis: redisPub
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -52,7 +57,7 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-app.use('/api/auth', setupAuthRoutes(redisPub));
+app.use('/api/auth', setupAuthRoutes(sessionStore));
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
@@ -84,10 +89,7 @@ const serverConfig: ServerConfig = {
   connectTimeout: 10000
 };
 
-const sessionStore = createSessionStore({
-  type: 'redis',
-  redis: redisPub
-});
+
 
 
 const io = new Server<

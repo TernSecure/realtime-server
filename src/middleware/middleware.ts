@@ -31,7 +31,7 @@ export const socketMiddleware = (
         
         socket.data = {
         clientId: session.clientId,
-        apiKey: session.apikey || '',
+        apiKey: session.apiKey || '',
         socketId: socket.id,
         sessionId: sessionId
       }

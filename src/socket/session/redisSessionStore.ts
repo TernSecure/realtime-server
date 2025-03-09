@@ -31,7 +31,7 @@ export class RedisSessionStore implements SessionStore {
     return {
       sessionId,
       clientId: sessionData.clientId,
-      apikey: sessionData.apikey,
+      apiKey: sessionData.apiKey,
       connected: sessionData.connected === 'true',
       lastActive: parseInt(sessionData.lastActive || '0', 10),
       userAgent: sessionData.userAgent || undefined,
@@ -63,7 +63,12 @@ export class RedisSessionStore implements SessionStore {
       // Store session data as a hash
       multi.hset(
         sessionKey,
+        'sessionId', session.sessionId,
         'clientId', session.clientId,
+        'apiKey', session.apiKey || '',
+        'serverPublicKey', session.serverPublicKey || '',
+        'clientPublicKey', session.clientPublicKey || '',
+        'encryptionReady', String(session.encryptionReady || false),
         'connected', String(session.connected),
         'lastActive', String(session.lastActive),
         'userAgent', session.userAgent || '',
@@ -85,6 +90,22 @@ export class RedisSessionStore implements SessionStore {
 
       }
       await multi.exec();
+  }
+
+  async updateConnection(session: Session): Promise<void> {
+    const sessionKey = `${SESSION_PREFIX}${session.sessionId}`;
+    const multi = this.redis.multi();
+
+    multi.hset(
+      sessionKey,
+      'clientPublicKey', session.clientPublicKey || '',
+      'encryptionReady', String(session.encryptionReady || false),
+      'lastActive', String(Date.now())
+    );
+
+    multi.expire(sessionKey, SESSION_TTL);
+
+    await multi.exec();
   }
 
 

@@ -28,6 +28,9 @@ export class InMemorySessionStore implements SessionStore {
     this.clientToSession.set(session.clientId, session.sessionId);
   }
 
+  async updateConnection(session: Session): Promise<void> {
+  }
+
 
   async updateConnectionStatus(
     sessionId: string, 

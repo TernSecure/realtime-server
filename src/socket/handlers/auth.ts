@@ -2,11 +2,10 @@ import { RequestHandler } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { Redis } from 'ioredis';
 import { getServerPublicKey } from '../../middleware';
+import { SessionStore } from '../../types';
 
-const SESSION_PREFIX = 'tobedeleted:session:';
-const SESSION_EXPIRY = 86400; // 24 hours
 
-export const createAuthHandler = (redis: Redis): RequestHandler => async (req, res) => {
+export const createAuthHandler = (sessionStore: SessionStore): RequestHandler => async (req, res) => {
   try {
     const { clientId, apiKey } = req.body;
     
@@ -20,18 +19,21 @@ export const createAuthHandler = (redis: Redis): RequestHandler => async (req, r
     const sessionId = uuidv4();
     const serverPublicKey = getServerPublicKey();
     
-    await redis.hset(`${SESSION_PREFIX}${sessionId}`, {
+    await sessionStore.createSession({
+      sessionId,
       clientId,
       apiKey,
       serverPublicKey,
-      created: Date.now(),
+      clientPublicKey: '',
+      encryptionReady: false, 
+      createdAt: Date.now(),
       connected: false,
       lastActive: Date.now(),
       userAgent: req.headers['user-agent'],
-      ip: req.ip
+      ip: req.ip,
+      socketIds: [] 
     });
     
-    await redis.expire(`${SESSION_PREFIX}${sessionId}`, SESSION_EXPIRY);
     
     res.status(200).json({
       sessionId,
@@ -43,7 +45,7 @@ export const createAuthHandler = (redis: Redis): RequestHandler => async (req, r
   }
 };
 
-export const createKeysHandler = (redis: Redis): RequestHandler => async (req, res) => {
+export const createKeysHandler = (sessionStore: SessionStore): RequestHandler => async (req, res) => {
   try {
     const { sessionId, clientPublicKey } = req.body;
     
@@ -54,14 +56,16 @@ export const createKeysHandler = (redis: Redis): RequestHandler => async (req, r
       return;
     }
     
-    const sessionExists = await redis.exists(`${SESSION_PREFIX}${sessionId}`);
-    if (!sessionExists) {
+    const session = await sessionStore.findSession(sessionId);
+    if (!session) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
     
-    await redis.hset(`${SESSION_PREFIX}${sessionId}`, 'clientPublicKey', clientPublicKey);
-    await redis.hset(`${SESSION_PREFIX}${sessionId}`, 'encryptionReady', 'true');
+    session.clientPublicKey = clientPublicKey;
+    session.encryptionReady = true;
+
+    await sessionStore.updateConnection(session);
     
     res.status(200).json({ 
       status: 'success',
