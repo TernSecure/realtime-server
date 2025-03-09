@@ -20,7 +20,12 @@ import type {
 import { socketMiddleware } from './middleware';
 //import { setupAuthRoutes } from './routes';
 import { setupAuthRoutes } from './api/auth';
+import dotenv from 'dotenv';
 
+dotenv.config();
+
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 
 interface ServerConfig {
@@ -40,7 +45,7 @@ interface ServerConfig {
 
 const app = express();
 const httpServer = createServer(app);
-const redisPub = new Redis();
+const redisPub = new Redis(redisUrl);
 const redisSub = redisPub.duplicate();
 //const state = new SocketState();
 
