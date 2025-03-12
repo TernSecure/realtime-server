@@ -17,6 +17,9 @@ export interface SocketData {
   apiKey: string;
   socketId: string;
   sessionId: string;
+  clientPublicKey?: string;
+  serverPublicKey?: string;
+  encryptionReady?: boolean;
 }
 
 export interface Presence {

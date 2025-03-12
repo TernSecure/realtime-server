@@ -33,7 +33,10 @@ export const socketMiddleware = (
         clientId: session.clientId,
         apiKey: session.apiKey || '',
         socketId: socket.id,
-        sessionId: sessionId
+        sessionId: sessionId,
+        clientPublicKey: session.clientPublicKey,
+        encryptionReady: session.encryptionReady,
+
       }
       
       next();

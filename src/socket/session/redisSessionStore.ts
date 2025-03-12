@@ -33,12 +33,16 @@ export class RedisSessionStore implements SessionStore {
       clientId: sessionData.clientId,
       apiKey: sessionData.apiKey,
       connected: sessionData.connected === 'true',
+      serverPublicKey: sessionData.serverPublicKey,
+      clientPublicKey: sessionData.clientPublicKey,
+      encryptionReady: sessionData.encryptionReady === 'true',
       lastActive: parseInt(sessionData.lastActive || '0', 10),
       userAgent: sessionData.userAgent || undefined,
       ip: sessionData.ip || undefined,
       socketIds: socketIds
     };
   }
+
 
   async findSessionByClientId(clientId: string): Promise<Session | null> {
     const sessionId = await this.redis.get(`${CLIENT_SESSION_PREFIX}${clientId}`);

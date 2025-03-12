@@ -1,31 +1,51 @@
 import { box, randomBytes } from 'tweetnacl';
 import { encodeBase64, decodeBase64, encodeUTF8, decodeUTF8 } from 'tweetnacl-util';
+import { SessionStore } from '../types';
 
-// Generate server keypair once at startup
+let sessionStore: SessionStore;
+
 const serverKeyPair = box.keyPair();
 
-// Store client public keys
-const clientPublicKeys = new Map<string, Uint8Array>();
-
-export const generateKeyPair = () => {
-  return encodeBase64(serverKeyPair.publicKey);
+export const initializeEncryption = (store: SessionStore) => {
+  sessionStore = store;
 };
+
 
 export const getServerPublicKey = (): string => {
   return encodeBase64(serverKeyPair.publicKey);
 };
 
-export const setClientPublicKey = (clientId: string, publicKeyBase64: string): void => {
-  const publicKey = decodeBase64(publicKeyBase64);
-  clientPublicKeys.set(clientId, publicKey);
+export const getClientPublicKey = async (clientId: string, sessionId: string): Promise<Uint8Array | null> => {
+  try {
+    const session = await sessionStore.findSession(sessionId);
+
+    console.log('Session:', session)
+    
+    if (!session || !session.clientPublicKey || !session.encryptionReady) {
+      console.warn(`No encryption ready session found for sessionId ${sessionId}`);
+      return null;
+    }
+
+    return decodeBase64(session.clientPublicKey);
+  } catch (error) {
+    console.error('Error getting client public key:', error);
+    return null;
+  }
 };
 
-export const hasClientPublicKey = (clientId: string): boolean => {
-  return clientPublicKeys.has(clientId);
+
+export const hasClientPublicKey = async (clientId: string, sessionId: string): Promise<boolean> => {
+  try {
+    const session = await sessionStore.findSession(sessionId);
+    return !!(session?.clientPublicKey && session?.encryptionReady);
+  } catch (error) {
+    console.error('Error checking client public key:', error);
+    return false;
+  }
 };
 
-export const encryptForClient = (clientId: string, message: any): string | null => {
-  const clientPublicKey = clientPublicKeys.get(clientId);
+export const encryptForClient = async (clientId: string, sessionId: string, message: any): Promise<string | null> => {
+  const clientPublicKey = await getClientPublicKey(clientId, sessionId);
   if (!clientPublicKey) return null;
 
   const messageString = typeof message === 'string' ? message : JSON.stringify(message);
@@ -51,8 +71,8 @@ export const encryptForClient = (clientId: string, message: any): string | null 
   return encodeBase64(fullMessage);
 };
 
-export const decryptFromClient = (clientId: string, encryptedBase64: string): any | null => {
-  const clientPublicKey = clientPublicKeys.get(clientId);
+export const decryptFromClient = async (clientId: string, sessionId: string, encryptedBase64: string): Promise<any | null> => {
+  const clientPublicKey = await getClientPublicKey(clientId, sessionId);
   if (!clientPublicKey) return null;
   
   // Decode the message from base64

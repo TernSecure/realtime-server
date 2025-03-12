@@ -7,7 +7,7 @@ import {
   API_KEY_CLIENTS_PREFIX
 } from '../../types'
 import { 
-  getServerPublicKey, setClientPublicKey, encryptForClient, decryptFromClient, hasClientPublicKey, 
+  getServerPublicKey, encryptForClient, decryptFromClient, hasClientPublicKey, 
   encryptAndPackMessage,
   decryptAndUnpackMessage
   } from '../../middleware';
@@ -46,29 +46,34 @@ function setupBinaryTransmission(socket: Socket) {
   // Override emit to encrypt data and send as binary
   socket.emit = function(event: string, ...args: any[]): boolean {
     const payload = args[0];
-    // Skip encryption for certain events
+    const sessionId = socket.data.sessionId; 
+    const encryptionReady = socket.data.encryptionReady;
 
-    if (hasClientPublicKey(clientId) && !UNENCRYPTED_EVENTS.includes(event)) {
+    console.log('from connection:',encryptionReady)
+
+    console.log('Encryption state check:', {
+      socketEncryptionReady: socket.data.encryptionReady,
+      event,
+      clientId
+    });
+
+
+    if (socket.data.encryptionReady) {
       try {
-        // Encrypt and send as binary
-        const encryptedBinaryData = encryptAndPackMessage(clientId, event, payload);
-        if (encryptedBinaryData) {
+        const encryptedBuffer = encryptAndPackMessage(clientId, sessionId, event, payload);
+        if (encryptedBuffer) {
           console.log(`Sending encrypted binary message for event: ${event}`);
-          return originalEmit.apply(this, ['binary', encryptedBinaryData, true]); // true flag indicates encrypted
+          return originalEmit.call(this, 'binary', encryptedBuffer, true);
+        } else {
+          console.warn('encryptAndPackMessage returned null');
         }
       } catch (error) {
-        console.error(`Error encrypting message for event ${event}:`, error);
+        console.error(`Encryption error for event ${event}:`, error);
       }
-    }
-
-    try {
-      const binaryData = packMessageAsBinary(event, payload);
-      if (binaryData.byteLength > 0) {
-        console.log(`Sending unencrypted binary message for event: ${event}`);
-        return originalEmit.apply(this, ['binary', binaryData, false]); // false flag indicates unencrypted
-      }
-    } catch (error) {
-      console.error(`Error packing message as binary for event ${event}:`, error);
+    } else {
+      console.log(`Encryption not ready. Sending unencrypted. Ready: ${socket.data.encryptionReady}, HasKey: ${hasClientPublicKey(clientId, sessionId)}`);
+      const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
+      return originalEmit.call(this, 'binary', binaryBuffer, false);
     }
     
     // Fallback to regular Socket.IO
@@ -76,11 +81,11 @@ function setupBinaryTransmission(socket: Socket) {
     return originalEmit.apply(this, [event, ...args]);
   };
 
-  socket.on('binary', (data: ArrayBuffer, isEncrypted: boolean) => {
+  socket.on('binary', async (data: Buffer | ArrayBuffer, isEncrypted: boolean) => {
     try {
-      if (isEncrypted) {
+      if (isEncrypted && socket.data.encryptionReady) {
         // Handle encrypted binary data
-        const message = decryptAndUnpackMessage(clientId, data);
+        const message = await decryptAndUnpackMessage(clientId, sessionId, data);
         if (message) {
           const { event, data: messageData } = message;
           console.log(`Received encrypted binary message for event: ${event}`);

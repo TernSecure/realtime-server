@@ -1,16 +1,17 @@
 import { encryptForClient, decryptFromClient } from './encryption';
 
-// Message format: { event: string, data: any }
-export function encryptAndPackMessage(clientId: string, event: string, data: any): ArrayBuffer | null {
+export async function encryptAndPackMessage(
+  clientId: string, 
+  sessionId: string, 
+  event: string, 
+  data: any
+): Promise<ArrayBuffer | null >{
   try {
-    // Create the complete message object
     const message = { event, data };
-    
-    // Convert to JSON string
     const jsonString = JSON.stringify(message);
     
     // Encrypt the entire message
-    const encryptedBase64 = encryptForClient(clientId, jsonString);
+    const encryptedBase64 = await encryptForClient(clientId, sessionId, jsonString);
     if (!encryptedBase64) return null;
     
     // Convert base64 to binary
@@ -27,7 +28,11 @@ export function encryptAndPackMessage(clientId: string, event: string, data: any
   }
 }
 
-export function decryptAndUnpackMessage(clientId: string, binaryData: ArrayBuffer): { event: string, data: any } | null {
+export async function decryptAndUnpackMessage(
+  clientId: string,
+  sessionId: string,
+  binaryData: ArrayBuffer
+): Promise<{ event: string, data: any } | null> {
   try {
     // Convert binary to base64
     const bytes = new Uint8Array(binaryData);
@@ -38,7 +43,7 @@ export function decryptAndUnpackMessage(clientId: string, binaryData: ArrayBuffe
     const base64 = btoa(binaryString);
     
     // Decrypt the message
-    const jsonString = decryptFromClient(clientId, base64);
+    const jsonString = await decryptFromClient(clientId, sessionId, base64);
     if (!jsonString) return null;
     
     // Parse the JSON

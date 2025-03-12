@@ -26,14 +26,16 @@ export const createEncryptionMiddleware = (io: Server) => {
       }
 
       const clientId = socket.data?.clientId;
-      if (!clientId || !hasClientPublicKey(clientId)) {
+      const sessionId = socket.data?.sessionId;
+      
+      if (!clientId) {
         console.log(`Client ${clientId} has no public key, sending unencrypted: ${event}`);
         return originalSocketEmit.apply(this, [event, ...args]);
       }
 
       // Encrypt the payload
       const payload = args[0];
-      const encryptedPayload = encryptForClient(clientId, payload);
+      const encryptedPayload = encryptForClient(clientId, sessionId, payload);
       
       if (encryptedPayload) {
         console.log(`Sending encrypted event: ${event} to client ${clientId}`);
@@ -72,13 +74,14 @@ export const createEncryptionMiddleware = (io: Server) => {
     socket.on('encrypted', (encryptedPacket) => {
       const { event, data } = encryptedPacket;
       const clientId = socket.data?.clientId;
+      const sessionId = socket.data?.sessionId;
       
       if (!clientId) {
         console.error('Client ID not found for decryption');
         return;
       }
       
-      const decryptedData = decryptFromClient(clientId, data);
+      const decryptedData = decryptFromClient(clientId, sessionId, data);
       if (decryptedData) {
         console.log(`Received encrypted event: ${event} from client ${clientId}`);
         // Emit the decrypted event internally

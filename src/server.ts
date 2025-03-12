@@ -17,7 +17,7 @@ import type {
   SocketData,
   TypedSocket,
 } from './types'
-import { socketMiddleware } from './middleware';
+import { socketMiddleware, initializeEncryption} from './middleware';
 //import { setupAuthRoutes } from './routes';
 import { setupAuthRoutes } from './api/auth';
 import dotenv from 'dotenv';
@@ -95,7 +95,7 @@ const serverConfig: ServerConfig = {
 };
 
 
-
+initializeEncryption(sessionStore);
 
 const io = new Server<
   ClientToServerEvents,
@@ -170,7 +170,7 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 });
 
 
-const PORT = 3000;
+const PORT = 3001;
 httpServer.listen(PORT, () => {
   logNetworkAddresses(PORT);
 });
