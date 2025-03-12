@@ -49,55 +49,56 @@ function setupBinaryTransmission(socket: Socket) {
     const sessionId = socket.data.sessionId; 
     const encryptionReady = socket.data.encryptionReady;
 
-    console.log('from connection:',encryptionReady)
-
-    console.log('Encryption state check:', {
-      socketEncryptionReady: socket.data.encryptionReady,
-      event,
-      clientId
-    });
-
 
     if (socket.data.encryptionReady) {
-      try {
-        const encryptedBuffer = encryptAndPackMessage(clientId, sessionId, event, payload);
-        if (encryptedBuffer) {
-          console.log(`Sending encrypted binary message for event: ${event}`);
-          return originalEmit.call(this, 'binary', encryptedBuffer, true);
-        } else {
-          console.warn('encryptAndPackMessage returned null');
-        }
-      } catch (error) {
-        console.error(`Encryption error for event ${event}:`, error);
-      }
+      // Use Promise for encryption but maintain sync emit
+      encryptAndPackMessage(clientId, sessionId, event, payload)
+        .then(encryptedBuffer => {
+          if (encryptedBuffer) {
+            console.log(`Sending encrypted binary message for event: ${event}`);
+            // Use call consistently
+            originalEmit.call(socket, 'binary', encryptedBuffer, true);
+          } else {
+            console.warn(`Encryption failed for ${event}, falling back to unencrypted`);
+            const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
+            originalEmit.call(socket, 'binary', binaryBuffer, false);
+          }
+        })
+        .catch(error => {
+          console.error(`Encryption error for ${event}:`, error);
+          // Fallback on error
+          const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
+          originalEmit.call(socket, 'binary', binaryBuffer, false);
+        });
     } else {
-      console.log(`Encryption not ready. Sending unencrypted. Ready: ${socket.data.encryptionReady}, HasKey: ${hasClientPublicKey(clientId, sessionId)}`);
+      // Unencrypted path
+      console.log(`Sending unencrypted binary message for event: ${event}`);
       const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
-      return originalEmit.call(this, 'binary', binaryBuffer, false);
+      originalEmit.call(socket, 'binary', binaryBuffer, false);
     }
-    
-    // Fallback to regular Socket.IO
-    console.warn(`Falling back to regular transmission for event: ${event}`);
-    return originalEmit.apply(this, [event, ...args]);
+
+    return true; // Socket.IO expects synchronous return
   };
 
   socket.on('binary', async (data: Buffer | ArrayBuffer, isEncrypted: boolean) => {
     try {
+      const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+
       if (isEncrypted && socket.data.encryptionReady) {
         // Handle encrypted binary data
-        const message = await decryptAndUnpackMessage(clientId, sessionId, data);
+        const message = await decryptAndUnpackMessage(clientId, sessionId, buffer);
         if (message) {
           const { event, data: messageData } = message;
           console.log(`Received encrypted binary message for event: ${event}`);
-          originalEmit.apply(socket, [event, messageData]);
+          //originalEmit.apply(socket, [event, messageData]);
+          originalEmit.call(socket, event, messageData);
         }
       } else {
         // Handle unencrypted binary data
-        const decoder = new TextDecoder();
-        const jsonString = decoder.decode(new Uint8Array(data));
-        const { event, data: messageData } = JSON.parse(jsonString);
+        const { event, data: messageData } = JSON.parse(buffer.toString());
         console.log(`Received unencrypted binary message for event: ${event}`);
-        originalEmit.apply(socket, [event, messageData]);
+        //originalEmit.apply(socket, [event, messageData]);
+        originalEmit.call(socket, event, messageData);
       }
     } catch (error) {
       console.error('Error processing binary message:', error);
