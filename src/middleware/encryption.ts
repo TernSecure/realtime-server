@@ -18,8 +18,6 @@ export const getServerPublicKey = (): string => {
 export const getClientPublicKey = async (clientId: string, sessionId: string): Promise<Uint8Array | null> => {
   try {
     const session = await sessionStore.findSession(sessionId);
-
-    console.log('Session:', session)
     
     if (!session || !session.clientPublicKey || !session.encryptionReady) {
       console.warn(`No encryption ready session found for sessionId ${sessionId}`);

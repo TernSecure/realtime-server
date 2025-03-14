@@ -118,9 +118,8 @@ io.use(socketMiddleware(sessionStore));
 
 io.on("connection", (socket: Socket<TypedSocket>) => {
   console.log("Client connected:", socket.id);
-  if(socket.recovered) {}
 
-  const connectionHandler = handleConnection(io, socket, redisPub);
+  const connectionHandler = handleConnection(io, socket, redisPub, sessionStore);
   const presenceHandler = handlePresence(io, socket, redisPub);
   const chatHandler = handleChat(io, socket, redisPub);
 
@@ -142,17 +141,29 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
       await sessionStore.updateConnectionStatus(socket.data.sessionId, socket.id, false);
 
       setTimeout(async () => {
-        const updatedSession = await sessionStore.findSession(socket.data.sessionId);
-        console.log(`No reconnection detected for session ${socket.data.sessionId}, performing cleanup`);
-        if (!updatedSession || !updatedSession.connected) {
-          const { isLastSocket, leaveRoom } = await connectionHandler.cleanup();
+        try {
+          const updatedSession = await sessionStore.findSession(socket.data.sessionId);
+          const hasReconnected = updatedSession?.socketIds && updatedSession.socketIds.length > 0;
 
-          await Promise.all([
-            presenceHandler.cleanup(isLastSocket),
-            chatHandler.cleanup()
-          ]);
+          if (!updatedSession || (!updatedSession.connected && !hasReconnected)) {
+            console.log(`No reconnection detected for session ${socket.data.sessionId}, performing cleanup`);
+            const { isLastSocket, leaveRoom } = await connectionHandler.cleanup();
 
-          leaveRoom();
+            await Promise.all([
+              presenceHandler.cleanup(isLastSocket),
+              chatHandler.cleanup()
+            ]);
+
+            leaveRoom();
+          } else {
+            console.log(
+              `Session ${socket.data.sessionId} has reconnected with ${
+                updatedSession.socketIds?.length || 0
+              } active sockets`
+            );
+          }
+        } catch (error) {
+          console.error('Error checking session reconnection:', error);
         }
       }, 30000);
     } else {

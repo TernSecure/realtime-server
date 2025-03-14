@@ -99,6 +99,8 @@ export interface ServerToClientEvents {
   'session': (data: { sessionId: string; serverPublicKey: string }) => void;
   'encryption:ready': () => void;
   'encrypted': (data: { event: string; data: string }) => void;
+
+  'binary': (data: ArrayBuffer, isEncrypted: boolean) => void;
 }
 
 export interface ClientToServerEvents {
@@ -117,6 +119,8 @@ export interface ClientToServerEvents {
   // Add encryption-related events
   'client:publicKey': (publicKey: string) => void;
   'encrypted': (data: { event: string; data: string }) => void;
+
+  'binary': (data: ArrayBuffer, isEncrypted: boolean) => void;
 }
 
 export interface InterServerEvents {

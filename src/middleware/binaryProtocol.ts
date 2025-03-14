@@ -43,13 +43,20 @@ export async function decryptAndUnpackMessage(
     const base64 = btoa(binaryString);
     
     // Decrypt the message
-    const jsonString = await decryptFromClient(clientId, sessionId, base64);
-    if (!jsonString) return null;
+    const decrypted = await decryptFromClient(clientId, sessionId, base64);
+    if (!decrypted) return null;
+    
+    // Add debug logs
+    console.log('Decrypted message before parsing:', decrypted);
+    
+    // Make sure we're parsing a string, not an object
+    const jsonString = typeof decrypted === 'string' ? decrypted : JSON.stringify(decrypted);
     
     // Parse the JSON
     return JSON.parse(jsonString);
   } catch (error) {
     console.error('Error decrypting message:', error);
+    console.error('Decryption input:', { clientId, sessionId });
     return null;
   }
 }

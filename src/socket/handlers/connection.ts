@@ -4,7 +4,8 @@ import type { SocketData } from '../../types';
 import {
   CLIENT_SOCKETS_PREFIX,
   SOCKET_MAP_PREFIX,
-  API_KEY_CLIENTS_PREFIX
+  API_KEY_CLIENTS_PREFIX,
+  SessionStore
 } from '../../types'
 import { 
   getServerPublicKey, encryptForClient, decryptFromClient, hasClientPublicKey, 
@@ -12,27 +13,12 @@ import {
   decryptAndUnpackMessage
   } from '../../middleware';
 
-const SOCKET_MAP_TTL = 24 * 60 * 60;
+//const SOCKET_MAP_TTL = 24 * 60 * 60;
+const SOCKET_MAP_TTL = 3431
 
 
 //const UNENCRYPTED_EVENTS = ['session', 'client:publicKey', 'encryption:ready'];
-const UNENCRYPTED_EVENTS: string[] = [];
-
-function packMessageAsBinary(event: string, data: any): ArrayBuffer {
-  try {
-    // Convert the event and data to a JSON string
-    const jsonString = JSON.stringify({ event, data });
-    
-    // Convert the JSON string to a Uint8Array
-    const encoder = new TextEncoder();
-    const binaryData = encoder.encode(jsonString);
-    
-    return binaryData.buffer;
-  } catch (error) {
-    console.error('Error packing message as binary:', error);
-    return new ArrayBuffer(0);
-  }
-}
+//const UNENCRYPTED_EVENTS: string[] = [];
 
 
 function setupBinaryTransmission(socket: Socket) {
@@ -80,28 +66,90 @@ function setupBinaryTransmission(socket: Socket) {
     return true; // Socket.IO expects synchronous return
   };
 
-  socket.on('binary', async (data: Buffer | ArrayBuffer, isEncrypted: boolean) => {
+  socket.on('binary', async (data: Buffer | ArrayBuffer, isEncrypted: boolean, ack?: Function) => {
     try {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-
+  
       if (isEncrypted && socket.data.encryptionReady) {
         // Handle encrypted binary data
         const message = await decryptAndUnpackMessage(clientId, sessionId, buffer);
         if (message) {
           const { event, data: messageData } = message;
           console.log(`Received encrypted binary message for event: ${event}`);
-          //originalEmit.apply(socket, [event, messageData]);
-          originalEmit.call(socket, event, messageData);
+          
+          // Check if there's an acknowledgment function
+          if (typeof ack === 'function') {
+            console.log(`Event ${event} has an acknowledgment function`);
+            
+            // Create a wrapper callback that will be passed to the event handler
+            const wrappedCallback = (response: any) => {
+              console.log(`Sending acknowledgment for ${event}:`, response);
+              ack(response);
+            };
+            
+            // Emit the event with the wrapped callback
+            socket.listeners(event).forEach(handler => {
+              try {
+                handler(messageData, wrappedCallback);
+              } catch (handlerError) {
+                console.error(`Error in handler for ${event}:`, handlerError);
+                wrappedCallback({ error: 'Internal server error' });
+              }
+            });
+          } else {
+            console.log(`Event ${event} has no acknowledgment function`);
+            // No acknowledgment, just emit the event
+            socket.listeners(event).forEach(handler => {
+              try {
+                handler(messageData);
+              } catch (handlerError) {
+                console.error(`Error in handler for ${event}:`, handlerError);
+              }
+            });
+          }
         }
       } else {
         // Handle unencrypted binary data
         const { event, data: messageData } = JSON.parse(buffer.toString());
         console.log(`Received unencrypted binary message for event: ${event}`);
-        //originalEmit.apply(socket, [event, messageData]);
-        originalEmit.call(socket, event, messageData);
+        
+        // Check if there's an acknowledgment function
+        if (typeof ack === 'function') {
+          console.log(`Event ${event} has an acknowledgment function`);
+          
+          // Create a wrapper callback that will be passed to the event handler
+          const wrappedCallback = (response: any) => {
+            console.log(`Sending acknowledgment for ${event}:`, response);
+            ack(response);
+          };
+          
+          // Emit the event with the wrapped callback
+          socket.listeners(event).forEach(handler => {
+            try {
+              handler(messageData, wrappedCallback);
+            } catch (handlerError) {
+              console.error(`Error in handler for ${event}:`, handlerError);
+              wrappedCallback({ error: 'Internal server error' });
+            }
+          });
+        } else {
+          console.log(`Event ${event} has no acknowledgment function`);
+          // No acknowledgment, just emit the event
+          socket.listeners(event).forEach(handler => {
+            try {
+              handler(messageData);
+            } catch (handlerError) {
+              console.error(`Error in handler for ${event}:`, handlerError);
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error processing binary message:', error);
+      // If there's an acknowledgment function, send an error
+      if (typeof ack === 'function') {
+        ack({ error: 'Failed to process message' });
+      }
     }
   });
 }
@@ -109,24 +157,30 @@ function setupBinaryTransmission(socket: Socket) {
 export const handleConnection = (
   io: Server,
   socket: Socket<any, any, any, SocketData>,
-  redis: Redis
+  redis: Redis,
+  sessionStore: SessionStore 
 ) => {
   const { clientId, apiKey, socketId, sessionId } = socket.data;
 
+
   setupBinaryTransmission(socket);
 
-  //socket.emit("session", {
-  //  sessionId: sessionId,
-  //  serverPublicKey: getServerPublicKey()
-  //});
+  const updateSessionConnection = async (recovered: boolean = false) => {
+    try {
+      await sessionStore.updateConnectionStatus(sessionId, socketId, true);
+      console.log(`${recovered ? 'Recovered' : 'New'} connection: Session ${sessionId} marked as connected`);
+    } catch (error) {
+      console.error('Error updating session connection status:', error);
+    }
+  };
 
-  //socket.on('client:publicKey', (publicKey: string) => {
-   // setClientPublicKey(clientId, publicKey);
-  //  console.log(`Received public key from client ${clientId}`);
-    
-    // Notify client that encryption is ready
-   // socket.emit('encryption:ready');
-  //});
+  if (socket.recovered) {
+    console.log(`Recovered connection for session ${sessionId}`);
+    updateSessionConnection(true);
+  } else {
+    console.log(`New connection for session ${sessionId}`);
+    updateSessionConnection();
+  }
 
   console.log(`Sent session ID ${sessionId} to client ${clientId}`);
 
@@ -135,27 +189,6 @@ export const handleConnection = (
   const clientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${clientId}`;
   const apiKeyClientsKey = `${API_KEY_CLIENTS_PREFIX}${apiKey}`;
 
-{/*  redis.multi()
-  // Map socket to client info
-  .hset(socketMapKey, {
-    clientId,
-    apiKey,
-    socketId,
-    sessionId
-  })
-  .expire(socketMapKey, SOCKET_MAP_TTL)  // Add TTL to socket mapping
-  
-  // Add socket to client's socket list
-  .sadd(clientSocketsKey, socketId)
-  .expire(clientSocketsKey, SOCKET_MAP_TTL)  // Add TTL to client sockets
-  
-  // Add client to API key's client list
-  .sadd(apiKeyClientsKey, clientId)
-  .expire(apiKeyClientsKey, SOCKET_MAP_TTL)  // Add TTL to API key clients
-  .exec()
-  .catch(err => {
-    console.error('Redis connection state error:', err);
-  }); */}
 
   // Using Promise.all for parallel Redis operations
   Promise.all([

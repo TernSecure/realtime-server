@@ -6,7 +6,8 @@ import {
  } from '../../types';
 
 const PRESENCE_PREFIX = 'presence:';
-const PRESENCE_TTL = 70000;
+//const PRESENCE_TTL = 70000;
+const PRESENCE_TTL = 3431;
 
 export const handlePresence = (
   io: Server,
@@ -44,10 +45,18 @@ export const handlePresence = (
 
     socket.emit('presence:sync', existingMembers);
 
-    io.to(`key:${apiKey}`).emit('presence:enter', {
-      clientId,
-      presence
-    });
+    //io.to(`key:${apiKey}`).emit('presence:enter', {
+    //  clientId,
+   //   presence
+   // });
+   console.log(`Emitting presence:enter event to key:${apiKey}`);
+   const sockets = await io.in(`key:${apiKey}`).fetchSockets();
+   for (const targetSocket of sockets) {
+    if (targetSocket.id !== socket.id) {
+      // This will use the overridden emit method that handles encryption
+      targetSocket.emit('presence:enter', { clientId, presence });
+    }
+  }
   };
 
   const cleanup = async (isLastSocket: boolean): Promise<void> => {
@@ -61,6 +70,7 @@ export const handlePresence = (
   };
 
   socket.on('presence:update', async ({ status, customMessage }: { status: string; customMessage: string }) => {
+    console.log(`PRESENCE UPDATE HANDLER TRIGGERED for client ${clientId}: status=${status}, message=${customMessage}`);
     const presence: Presence = {
       status,
       customMessage,
@@ -70,8 +80,14 @@ export const handlePresence = (
 
     await redis.hset(presenceKey, presence);
     await redis.expire(presenceKey, PRESENCE_TTL);
-
-    io.to(`key:${apiKey}`).emit('presence:update', { clientId, presence });
+    
+    console.log(`Emitting presence:update event to key:${apiKey}`);
+    //io.to(`key:${apiKey}`).emit('presence:update', { clientId, presence });
+    const sockets = await io.in(`key:${apiKey}`).fetchSockets();
+    for (const targetSocket of sockets) {
+      // This will use the overridden emit method that handles encryption
+      targetSocket.emit('presence:update', { clientId, presence });
+    }
   });
 
   socket.on('presence:heartbeat', async () => {

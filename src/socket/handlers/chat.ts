@@ -45,7 +45,19 @@ export const handleChat = (
     if (isSubscribed) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
-        targetSocket.emit('chat:status', { messageId, status });
+        console.log(`Sending chat:status update to socket ${targetSocketId} for message ${messageId}: ${status}`);
+
+        if (targetSocket.data && targetSocket.data.encryptionReady) {
+          console.log(`Using encrypted binary format for chat:status to ${targetSocketId}`);
+          targetSocket.emit('chat:status', { messageId, status });
+        } else {
+          console.log(`Using unencrypted format for chat:status to ${targetSocketId}`);
+          targetSocket.emit('chat:status', { messageId, status });
+        }
+
+        //targetSocket.emit('chat:status', { messageId, status });
+
+        //targetSocket.emit('chat:status', { messageId, status });
       } else {
         console.log(`[SendStatus] Target socket not found`);
       }
@@ -112,20 +124,26 @@ export const handleChat = (
         });
       }
 
-      const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
-      const recipientSockets = await redis.smembers(recipientSocketsKey);
-
       socket.emit('chat:message', messageData); //Always send the message to the sender
 
       sendStatusUpdate(socketId, messageData.messageId, 'sent');
 
+      const recipientSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${targetId}`;
+      const recipientSockets = await redis.smembers(recipientSocketsKey);
+
+
       if (recipientSockets.length > 0) {
         for (const recipientSocketId of recipientSockets) {
           const recipientSocket = io.sockets.sockets.get(recipientSocketId);
+
           if (recipientSocket) {
             recipientSocket.emit('chat:message', messageData);
 
+
             try {
+              console.log(`Requesting delivery confirmation for message ${messageData.messageId} from socket ${recipientSocketId}`);
+
+
               const response = await io.timeout(2000).to(recipientSocketId).emitWithAck('chat:status', {
                 messageId: messageData.messageId,
                 status: 'confirm_delivery',
@@ -162,14 +180,23 @@ export const handleChat = (
       // If this is a receipt confirmation request, acknowledge it
       if (data.status === 'confirm_delivery' && callback) {
         console.log('Confirming delivery for:', data.messageId);
+
+        try {
         callback({ received: true });
+        console.log(`Sent delivery confirmation for ${data.messageId}`);
+      } catch (callbackError) {
+        console.error('Error sending callback response:', callbackError);
       }
+    }
     } catch (error) {
       console.error('Error handling message status:', error);
       if (callback) {
+        try {
         callback({ received: false });
+      } catch (callbackError) {
+        console.error('Error sending error callback:', callbackError);
       }
-      return { success: false };
+    }
     }
   });
 
@@ -213,13 +240,18 @@ export const handleChat = (
 
       console.log(`Found ${conversations.length} conversations for user ${clientId}`);
 
+      const responseData = {
+        success: true,
+        conversations: conversations.length ? conversations.slice(offset, offset + limit) : [],
+        hasMore: conversations.length > offset + limit
+      };
+
+      console.log(`Sending chat:conversations response to client ${clientId}`);
+
       if (!conversations.length) {
         if(callback) {
-          callback({
-            success: true,
-            conversations: [],
-            hasMore: false,
-          });
+          console.log('Sending response via callback - no conversations found');
+          callback(responseData);
         }
         return;
       }
@@ -229,19 +261,19 @@ export const handleChat = (
     const hasMore = conversations.length > offset + limit;
 
     if (callback) {
-      callback({
-        success: true,
-        conversations: paginatedConversations,
-        hasMore
-      });
+      console.log('Sending response via callback');
+      callback(responseData);
     }
   } catch (error) {
     console.error('Error fetching conversations:', error);
+
+    const errorResponse = { 
+      success: false, 
+      error: 'Failed to fetch conversations'
+    };
+
     if (callback) {
-      callback({ 
-        success: false, 
-        error: 'Failed to fetch conversations'
-      });
+      callback(errorResponse);
     }
   }
   });

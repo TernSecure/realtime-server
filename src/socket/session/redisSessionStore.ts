@@ -3,7 +3,8 @@ import type { Session, SessionStore } from '../../types';
 import {  CLIENT_SESSION_PREFIX, SESSION_PREFIX } from '../../types';
 
 // Session TTL in seconds (24 hours)
-const SESSION_TTL = 24 * 60 * 60;
+//const SESSION_TTL = 24 * 60 * 60;
+const SESSION_TTL = 3431
 //const SESSION_PREFIX = 'tobedeleted:session:';
 
 export class RedisSessionStore implements SessionStore {
