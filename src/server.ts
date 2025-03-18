@@ -87,7 +87,7 @@ const serverConfig: ServerConfig = {
     credentials: true
   },
   connectionStateRecovery: {
-    maxDisconnectionDuration: Infinity,
+    maxDisconnectionDuration: 2 * 60 * 1000,
   },
   pingTimeout: 60000,
   pingInterval: 25000,
