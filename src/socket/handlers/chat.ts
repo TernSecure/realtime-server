@@ -49,7 +49,7 @@ export const handleChat = (
 
         if (targetSocket.data && targetSocket.data.encryptionReady) {
           console.log(`Using encrypted binary format for chat:status to ${targetSocketId}`);
-          targetSocket.emit('chat:status', { messageId, status });
+         targetSocket.emit('chat:status', { messageId, status });
         } else {
           console.log(`Using unencrypted format for chat:status to ${targetSocketId}`);
           targetSocket.emit('chat:status', { messageId, status });
@@ -68,6 +68,15 @@ export const handleChat = (
     
 
   const joinPrivateRoom = async (targetId: string): Promise<string> => {
+    if (!clientId || !targetId) {
+      throw new Error('Invalid client or target ID');
+    }
+  
+    // Ensure IDs are different
+    if (clientId === targetId) {
+      throw new Error('Cannot create chat room with self');
+    }
+
     // Create a consistent room ID based on the two user IDs
     const participants = [clientId, targetId].sort();
     const roomId = `${participants[0]}_${participants[1]}`;
@@ -86,23 +95,69 @@ export const handleChat = (
     return roomId;
   };
 
-  // Handle private message
-  socket.on('chat:private', async (data: { 
-    targetId: string; 
-    message: string;
-    metaData?: ClientMetaData;
-    toData?: ClientMetaData;
-  }, callback?: (response: { success: boolean; messageId?: string; error?: string }) => void) => {
+  const sendStatusCheckWithTimeout = async (recipientSocketId: string, messageData: ChatMessage): Promise<boolean> => {
     try {
+      const targetSocket = io.sockets.sockets.get(recipientSocketId);
+      if (!targetSocket) {
+        console.log('Target socket not found for delivery confirmation');
+        return false;
+      }
+
+      console.log(`Sending delivery confirmation request to ${recipientSocketId} for message ${messageData.messageId}`);
+  
+      // Use Socket.IO's timeout feature on the socket instance
+      return new Promise<boolean>((resolve) => {
+        targetSocket.timeout(2000).emit('chat:status', {
+          messageId: messageData.messageId,
+          status: 'confirm_delivery',
+          fromId: messageData.fromId
+        },
+     //(response: { received: boolean } | Error) => {
+        //  if (response instanceof Error) {
+         //   console.log(`Delivery confirmation timeout for ${messageData.messageId}:`, response.message);
+         //   resolve(false);
+         // } else {
+         //   console.log(`Delivery confirmation response for ${messageData.messageId}:`, response);
+         //   resolve(response?.received || false);
+        //  }
+       // }
+     // );
+    // });
+    (error: Error | null) => {
+      if (error) {
+        console.log(`Delivery confirmation timeout for ${messageData.messageId}:`, error.message);
+        resolve(false);
+      } else {
+        // Just acknowledge the emit went through, actual confirmation comes via event
+        resolve(true);
+      }
+    });
+  });
+  } catch (error) {
+    console.error('Error in sendStatusCheckWithTimeout:', error);
+    return false;
+  }
+};
+
+  // Handle private message
+  socket.on('chat:private', async (rawData: any, callback?: (response: { 
+    success: boolean; 
+    messageId?: string; 
+    error?: string 
+  }) => void) => {
+    try {
+      const data = rawData.data ? rawData.data : rawData;
       const { targetId, message, metaData, toData } = data;
 
-      //const fromData = await getClientData(clientId);
-      //const toData = await getClientData(targetId);
-
+      console.log('Received chat:private data:', {
+        targetId,
+        fromId: clientId,
+        metaData,
+        toData
+      });
 
       const roomId = await joinPrivateRoom(targetId);
       const safeRoomId = roomId || [clientId, targetId].sort().join('_');
-
 
       const messageData: ChatMessage = {
         messageId: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -117,12 +172,18 @@ export const handleChat = (
       await messageStore.saveMessage(apiKey, messageData);
 
       // Acknowledge message receipt to sender immediately
-      if (callback) {
-        callback({ 
-          success: true, 
-          messageId: messageData.messageId,
-        });
-      }
+      //if (callback) {
+       // callback({ 
+       //   success: true, 
+       //   messageId: messageData.messageId,
+      //  });
+      //}
+
+      socket.emit('chat:status', {
+        messageId: messageData.messageId,
+        status: 'server_received',
+        success: true
+      });
 
       socket.emit('chat:message', messageData); //Always send the message to the sender
 
@@ -139,21 +200,16 @@ export const handleChat = (
           if (recipientSocket) {
             recipientSocket.emit('chat:message', messageData);
 
-
-            try {
               console.log(`Requesting delivery confirmation for message ${messageData.messageId} from socket ${recipientSocketId}`);
-
-
-              const response = await io.timeout(2000).to(recipientSocketId).emitWithAck('chat:status', {
-                messageId: messageData.messageId,
-                status: 'confirm_delivery',
-              });
-
-              sendStatusUpdate(socketId, messageData.messageId, 'delivered');
-              break;
-            } catch (error) {
-              console.log('Delivery confirmation error:', error);
-              continue;
+              const received = await sendStatusCheckWithTimeout(recipientSocketId, messageData) //io.timeout(2000).to(recipientSocketId).emitWithAck('chat:status', {
+                //messageId: messageData.messageId,
+                //status: 'confirm_delivery',
+              //});
+              if (received) {
+                console.log(`Message ${messageData.messageId} confirmed delivered to ${recipientSocketId}`);
+                sendStatusUpdate(socketId, messageData.messageId, 'delivered');
+              } else {
+                console.log(`No delivery confirmation from ${recipientSocketId} for message ${messageData.messageId}`);
             }
           }
         }
@@ -162,73 +218,60 @@ export const handleChat = (
     } catch (error) {
       console.error('Error handling private message:', error);
       socket.emit('chat:error', { message: 'Failed to send message' });
-      if (callback){
-        callback({ 
-          success: false,
-          error: 'Failed to send message'
-        });
-      }
+      socket.emit('chat:status', {
+        status: 'server_received',
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send message'
+      });
+      //if (callback){
+        //callback({ 
+        //  success: false,
+       //   error: error instanceof Error ? error.message : 'Failed to send message'
+       // });
+      //}
     }
   });
 
-  socket.on('chat:status', (
-    data: { messageId: string, status: string },
+  socket.on('chat:status', async (
+    rawData: any,
     callback?: (response: { received: boolean }) => void
   ) => {
     try {
-      console.log(`Received status update from ${clientId}: messageId=${data.messageId}, status=${data.status}`);
-      // If this is a receipt confirmation request, acknowledge it
-      if (data.status === 'confirm_delivery' && callback) {
-        console.log('Confirming delivery for:', data.messageId);
+      const data = rawData.data ? rawData.data : rawData;
+      const { messageId, status, fromId } = data;
 
-        try {
-        callback({ received: true });
-        console.log(`Sent delivery confirmation for ${data.messageId}`);
+      console.log(`Status: Received status update from ${clientId}:`, {
+        messageId,
+        status,
+        fromId
+      });
+      // If this is a receipt confirmation request, acknowledge it
+      if (status === 'delivered_confirmed' && fromId) {
+        console.log('Confirming delivery for:', messageId);
+
+          const senderSocketsKey = `${apiKey}:${CLIENT_SOCKETS_PREFIX}${fromId}`;
+          const senderSockets = await redis.smembers(senderSocketsKey);
+
+          console.log(`Found ${senderSockets.length} sender sockets for ${fromId}`);
+
+            for (const senderSocketId of senderSockets) {
+              const senderSocket = io.sockets.sockets.get(senderSocketId);
+              console.log(`Attempting to send status update to sender socket ${senderSocketId}`);
+              await sendStatusUpdate(senderSocketId, messageId, 'delivered');
+            }
+        } 
+        //callback({ received: true });
       } catch (callbackError) {
         console.error('Error sending callback response:', callbackError);
       }
-    }
-    } catch (error) {
-      console.error('Error handling message status:', error);
-      if (callback) {
-        try {
-        callback({ received: false });
-      } catch (callbackError) {
-        console.error('Error sending error callback:', callbackError);
-      }
-    }
-    }
   });
 
-  socket.on('chat:confirm_receipt', (
-    data: { messageId: string },
-    callback?: (response: { received: boolean }) => void
-  ) => {
-    try {
-      if(callback) {
-        callback({ received: true });
-      }
-
-      return { received: true };
-    } catch (error) {
-      if(callback) {
-        callback({ received: false });
-      }
-      return { received: false };
-    }
-  });
 
   socket.on('chat:conversations', async(
-    options: { limit?: number; offset?: number; },
-    callback?: (response: {
-      success: boolean;
-      conversations?: any[];
-      hasMore?: boolean;
-      error?: string;
-    }) => void
+    rawData: any
   ) => {
     try {
-      const { limit =  50, offset = 0 } = options;
+      const { limit =  50, offset = 0, requestId } = rawData.data ? rawData.data : rawData;
 
       console.log(`Fetching conversations for client ${clientId} with apiKey ${apiKey}`);
 
@@ -246,39 +289,29 @@ export const handleChat = (
         hasMore: conversations.length > offset + limit
       };
 
-      console.log(`Sending chat:conversations response to client ${clientId}`);
-
-      if (!conversations.length) {
-        if(callback) {
-          console.log('Sending response via callback - no conversations found');
-          callback(responseData);
-        }
-        return;
-      }
+    console.log(`Sending chat:conversations response to client ${clientId}`);
 
 
     const paginatedConversations = conversations.slice(offset, offset + limit);
     const hasMore = conversations.length > offset + limit;
 
-    if (callback) {
-      console.log('Sending response via callback');
-      callback(responseData);
-    }
+    socket.emit('chat:conversations_response', {
+      requestId,
+      success: true,
+      conversations: paginatedConversations,
+      hasMore
+    });
   } catch (error) {
     console.error('Error fetching conversations:', error);
-
-    const errorResponse = { 
-      success: false, 
+    socket.emit('chat:conversations_response', {
+      //requestId,
+      success: false,
       error: 'Failed to fetch conversations'
-    };
-
-    if (callback) {
-      callback(errorResponse);
-    }
+    });
   }
   });
 
-  socket.on('chat:messages', async (
+{/*  socket.on('chat:messages', async (
     options: { 
       roomId: string; 
       limit?: number;
@@ -329,7 +362,78 @@ export const handleChat = (
       });
     }
   }
-});
+}); */}
+
+  socket.on('chat:messages', async (
+  rawData: any,
+  callback?: (response: {
+    success: boolean;
+    messages?: ChatMessage[];
+    error?: string;
+  }) => void
+) => {
+  try {
+    const options = rawData.data ? rawData.data : rawData;
+    const { roomId, limit = 50, before = null, after = null, requestId } = options;
+
+    console.log('Received chat:messages request:', {
+      roomId,
+      clientId,
+      limit,
+      before,
+      after
+    });
+
+    // Validate required parameters
+    if (!roomId || !clientId) {
+      socket.emit('chat:messages_response', {
+        requestId,
+        success: false,
+        error: 'Invalid room or client ID'
+      })
+      return;
+    }
+
+    // Check if client is authorized for this room
+    if (!roomId.split('_').includes(clientId)) {
+      socket.emit('chat:messages_response', {
+        requestId,
+        success: false,
+        error: 'Unauthorized access to room'
+      });
+      //if (callback) {
+        //callback({
+          //success: false,
+         // error: 'Unauthorized access to room'
+        //});
+      //}
+      return;
+    }
+
+    const messages = await messageStore.getMessages(
+      apiKey,
+      roomId,
+      {
+        limit,
+        before: before || undefined,
+        after: after || undefined
+      }
+    );
+
+    socket.emit('chat:messages_response', {
+      requestId,
+      success: true,
+      messages
+    });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    socket.emit('chat:messages_response', {
+      //requestId,
+      success: false,
+      error: 'Failed to fetch messages'
+    });
+  }
+  });
 
 
   socket.on('chat:profile_update', async (data: ClientMetaData) => {

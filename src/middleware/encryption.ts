@@ -1,13 +1,46 @@
 import { box, randomBytes } from 'tweetnacl';
 import { encodeBase64, decodeBase64, encodeUTF8, decodeUTF8 } from 'tweetnacl-util';
 import { SessionStore } from '../types';
+import { Redis } from 'ioredis';
 
 let sessionStore: SessionStore;
+let redis: Redis;
+let serverKeyPair = box.keyPair();
 
-const serverKeyPair = box.keyPair();
+const SERVER_KEYS_KEY = 'server:keypair';
 
-export const initializeEncryption = (store: SessionStore) => {
+export const initializeEncryption = async (store: SessionStore, redisClient: Redis) => {
   sessionStore = store;
+  redis = redisClient;
+
+  const storedKeys = await redis.get(SERVER_KEYS_KEY);
+  if (storedKeys) {
+    try {
+      const { publicKey, secretKey } = JSON.parse(storedKeys);
+      serverKeyPair = {
+        publicKey: decodeBase64(publicKey),
+        secretKey: decodeBase64(secretKey)
+      };
+      console.log('Loaded existing server keypair');
+    } catch (error) {
+      console.error('Error loading server keys, generating new ones:', error);
+      generateAndStoreNewKeys();
+    }
+  } else {
+    generateAndStoreNewKeys();
+  }
+};
+
+const generateAndStoreNewKeys = async () => {
+  serverKeyPair = box.keyPair();
+  
+  // Store the new keys in Redis
+  await redis.set(SERVER_KEYS_KEY, JSON.stringify({
+    publicKey: encodeBase64(serverKeyPair.publicKey),
+    secretKey: encodeBase64(serverKeyPair.secretKey)
+  }));
+  
+  console.log('Generated and stored new server keypair');
 };
 
 

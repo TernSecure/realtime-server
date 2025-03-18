@@ -87,7 +87,7 @@ const serverConfig: ServerConfig = {
     credentials: true
   },
   connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000,
+    maxDisconnectionDuration: Infinity,
   },
   pingTimeout: 60000,
   pingInterval: 25000,
@@ -95,7 +95,7 @@ const serverConfig: ServerConfig = {
 };
 
 
-initializeEncryption(sessionStore);
+initializeEncryption(sessionStore, redisPub);
 
 const io = new Server<
   ClientToServerEvents,
@@ -181,7 +181,7 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 });
 
 
-const PORT = 3000;
+const PORT = 3001;
 httpServer.listen(PORT, () => {
   logNetworkAddresses(PORT);
 });

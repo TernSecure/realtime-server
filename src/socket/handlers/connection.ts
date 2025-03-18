@@ -12,6 +12,7 @@ import {
   encryptAndPackMessage,
   decryptAndUnpackMessage
   } from '../../middleware';
+import { response } from 'express';
 
 //const SOCKET_MAP_TTL = 24 * 60 * 60;
 const SOCKET_MAP_TTL = 3431
@@ -21,7 +22,7 @@ const SOCKET_MAP_TTL = 3431
 //const UNENCRYPTED_EVENTS: string[] = [];
 
 
-function setupBinaryTransmission(socket: Socket) {
+{/*function setupBinaryTransmission(socket: Socket) {
   const clientId = socket.data?.clientId;
   const sessionId = socket.data?.sessionId;
   if (!clientId || !sessionId) return;
@@ -152,6 +153,144 @@ function setupBinaryTransmission(socket: Socket) {
       }
     }
   });
+} */}
+
+function setupBinaryTransmission(socket: Socket) {
+  const clientId = socket.data?.clientId;
+  const sessionId = socket.data?.sessionId;
+  if (!clientId || !sessionId) return;
+  
+  const originalEmit = socket.emit;
+  
+  // Override emit to encrypt data when needed
+  socket.emit = function(event: string, ...args: any[]): boolean {
+    const payload = args[0];
+
+    if (socket.data.encryptionReady) {
+      // Encrypt the payload directly
+      encryptAndPackMessage(clientId, sessionId, event, payload)
+        .then(encryptedBuffer => {
+          if (encryptedBuffer) {
+            // Send encrypted buffer directly with the original event name
+            //originalEmit.call(socket, event, encryptedBuffer, callback);
+            originalEmit.call(socket, 'binary', encryptedBuffer, true);
+          } else {
+            // Fallback to unencrypted
+            //originalEmit.call(socket, event, payload, callback);
+            const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
+            originalEmit.call(socket, 'binary', binaryBuffer, false);
+          }
+        })
+        .catch(error => {
+          console.error(`Encryption error for ${event}:`, error);
+          //originalEmit.call(socket, event, payload, callback);
+          const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
+          originalEmit.call(socket, 'binary', binaryBuffer, false);
+        });
+    } else {
+      // Send unencrypted
+      //originalEmit.call(socket, event, payload, callback);
+      const binaryBuffer = Buffer.from(JSON.stringify({ event, data: payload }));
+      originalEmit.call(socket, 'binary', binaryBuffer, false);
+    }
+
+    return true;
+  };
+
+  // Use Socket.IO's public API for handling incoming events
+  const onHandlers = new Map<string, Function[]>();
+  const originalOn = socket.on;
+  
+{/*  socket.on = function(event: string, handler: Function): any {
+    const wrappedHandler = async (data: any, ack?: Function) => {
+      try {
+        if (Buffer.isBuffer(data) || data instanceof ArrayBuffer) {
+          if (socket.data.encryptionReady) {
+            const decrypted = await decryptAndUnpackMessage(clientId, sessionId, data);
+            if (decrypted) {
+              const wrapppedAck = ack ? async (response: any) => {
+                if (socket.data.encryptionReady) {
+                  try {
+                    const encryptedBuffer = await encryptAndPackMessage(clientId, sessionId, event, response);
+                    if (encryptedBuffer) {
+                      ack(response);
+                      return;
+                    }
+                  } catch (error) {
+                    console.error(`Ack encryption error for ${event}:`, error);
+                  }
+                }
+                ack(response)
+              } : undefined
+              handler(decrypted, wrapppedAck);
+              return;
+              //handler(decrypted, ack);
+              //return;
+            }
+          }
+        }
+        // Handle regular or failed decryption cases
+        handler(data, ack);
+      } catch (error) {
+        console.error(`Error handling event ${event}:`, error);
+        if (typeof ack === 'function') {
+          ack({ error: 'Internal server error' });
+        }
+      }
+    };
+
+    // Store the handler mapping
+    if (!onHandlers.has(event)) {
+      onHandlers.set(event, []);
+    }
+    onHandlers.get(event)?.push(handler);
+
+    return originalOn.call(socket, event, wrappedHandler);
+  }; */}
+
+  socket.on('binary', async (data: Buffer | ArrayBuffer, isEncrypted: boolean) => {
+    try {
+      const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  
+      if (isEncrypted && socket.data.encryptionReady) {
+        const message = await decryptAndUnpackMessage(clientId, sessionId, buffer);
+        if (message) {
+          const { event, data: messageData } = message;
+          console.log(`Received encrypted binary message for event: ${event}`);
+          
+          // Emit the decrypted event and data
+          socket.listeners(event).forEach(handler => {
+            try {
+              handler(messageData);
+            } catch (handlerError) {
+              console.error(`Error in handler for ${event}:`, handlerError);
+            }
+          });
+        }
+      } else {
+        // Handle unencrypted binary data
+        const { event, data: messageData } = JSON.parse(buffer.toString());
+        console.log(`Received unencrypted binary message for event: ${event}`);
+
+        socket.listeners(event).forEach(handler => {
+          try {
+            handler(messageData);
+          } catch (handlerError) {
+            console.error(`Error in handler for ${event}:`, handlerError);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error processing binary message:', error);
+    }
+  });
+
+  return () => {
+    // Cleanup function
+    socket.emit = originalEmit;
+    //socket.on = originalOn;
+    onHandlers.clear();
+  };
 }
 
 export const handleConnection = (

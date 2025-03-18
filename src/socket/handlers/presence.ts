@@ -69,7 +69,10 @@ export const handlePresence = (
     }
   };
 
-  socket.on('presence:update', async ({ status, customMessage }: { status: string; customMessage: string }) => {
+  socket.on('presence:update', async (rawData: any) => {
+    const data = rawData.data ? rawData.data : rawData;
+    const { status, customMessage } = data;
+    
     console.log(`PRESENCE UPDATE HANDLER TRIGGERED for client ${clientId}: status=${status}, message=${customMessage}`);
     const presence: Presence = {
       status,
