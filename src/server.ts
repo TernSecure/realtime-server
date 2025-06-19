@@ -49,6 +49,10 @@ const redisPub = new Redis(redisUrl);
 const redisSub = redisPub.duplicate();
 //const state = new SocketState();
 
+redisPub.on('error', (err) => {
+  console.error('Redis Error:', err);
+});
+
 const sessionStore = createSessionStore({
   type: 'redis',
   redis: redisPub
@@ -137,51 +141,29 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
     console.log('Client disconnected:', socket.id, reason);
     const session = await sessionStore.findSession(socket.data.sessionId);
 
-    if ((reason === 'transport close' || reason === 'ping timeout') && session) {
-      await sessionStore.updateConnectionStatus(socket.data.sessionId, socket.id, false);
+    if (reason === 'transport close' || reason === 'ping timeout') {
+      await Promise.all([
+        sessionStore.updateConnectionStatus(socket.data.sessionId, socket.id, false),
+        presenceHandler.cleanup(false),
+        chatHandler.cleanup()
+      ]);
 
-      setTimeout(async () => {
-        try {
-          const updatedSession = await sessionStore.findSession(socket.data.sessionId);
-          const hasReconnected = updatedSession?.socketIds && updatedSession.socketIds.length > 0;
-
-          if (!updatedSession || (!updatedSession.connected && !hasReconnected)) {
-            console.log(`No reconnection detected for session ${socket.data.sessionId}, performing cleanup`);
-            const { isLastSocket, leaveRoom } = await connectionHandler.cleanup();
-
-            await Promise.all([
-              presenceHandler.cleanup(isLastSocket),
-              chatHandler.cleanup()
-            ]);
-
-            leaveRoom();
-          } else {
-            console.log(
-              `Session ${socket.data.sessionId} has reconnected with ${
-                updatedSession.socketIds?.length || 0
-              } active sockets`
-            );
-          }
-        } catch (error) {
-          console.error('Error checking session reconnection:', error);
-        }
-      }, 30000);
+      console.log(`Client ${socket.id} disconnected due to ${reason}`);
     } else {
-    
-    const { isLastSocket, leaveRoom } = await connectionHandler.cleanup();
+    const { isLastSocket } = await connectionHandler.cleanup();
     
     await Promise.all([
       presenceHandler.cleanup(isLastSocket),
       chatHandler.cleanup()
     ]);
 
-    leaveRoom();
+    console.log(`Client with socket: ${socket.id} disconnected`);
   }
   });
 });
 
 
-const PORT = 3000;
+const PORT = 3001;
 httpServer.listen(PORT, () => {
   logNetworkAddresses(PORT);
 });

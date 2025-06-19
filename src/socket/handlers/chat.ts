@@ -529,17 +529,8 @@ async function getClientData(clientId: string): Promise<ClientMetaData | undefin
 
   return {
     cleanup: async () => {
-      //statusSubscribers.delete(socketId);
       await redis.srem(STATUS_SUBSCRIBERS_KEY, socketId);
-      // Leave all rooms
-      const rooms = Array.from(socket.rooms);
-      for (const room of rooms) {
-        if (room !== socketId) {
-          const roomKey = `${apiKey}:${CHAT_ROOMS_PREFIX}${room}`;
-          await redis.srem(roomKey, clientId);
-          socket.leave(room);
-        }
-      }
+      console.log(`Remove ${socketId} from  message status subscribers list}`)
     }
   };
 };
