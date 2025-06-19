@@ -48,6 +48,7 @@ const httpServer = createServer(app);
 const redisPub = new Redis(redisUrl);
 const redisSub = redisPub.duplicate();
 //const state = new SocketState();
+console.log('Redis URL:', redisUrl);
 
 redisPub.on('error', (err) => {
   console.error('Redis Error:', err);
