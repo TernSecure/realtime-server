@@ -167,7 +167,7 @@ io.on("connection", (socket: Socket<TypedSocket>) => {
 });
 
 
-const PORT = 3001;
+const PORT = 3000;
 httpServer.listen(PORT, () => {
   logNetworkAddresses(PORT);
 });
