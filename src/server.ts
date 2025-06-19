@@ -25,7 +25,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisUrl = process.env.REDIS_URL;
+
+if (!redisUrl) {
+  throw new Error('redis url is not defined in the environment variables');
+}
 
 
 interface ServerConfig {
@@ -48,7 +52,6 @@ const httpServer = createServer(app);
 const redisPub = new Redis(redisUrl);
 const redisSub = redisPub.duplicate();
 //const state = new SocketState();
-console.log('Redis URL:', redisUrl);
 
 redisPub.on('error', (err) => {
   console.error('Redis Error:', err);
